@@ -1,0 +1,44 @@
+name: CI
+on:
+  push:
+    branches: ['**']
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v5
+      - name: Set up Rust
+        run: |
+          rustup toolchain install stable --profile minimal --component clippy
+          if ($LASTEXITCODE -ne 0) { throw 'Rust installation failed' }
+          rustup default stable-x86_64-pc-windows-msvc
+          if ($LASTEXITCODE -ne 0) { throw 'Rust selection failed' }
+      - name: Install Inno Setup
+        run: choco install innosetup --version=6.7.0 --no-progress -y
+      - name: Test
+        run: cargo test --locked
+      - name: Lint
+        run: cargo clippy --locked
+      - name: Test release and update helpers
+        run: ./scripts/test-release.ps1
+      - name: Package portable app and installer
+        run: ./scripts/release.ps1 -SkipTests -Installer
+      - name: Smoke test installer
+        run: ./scripts/test-installer.ps1
+      - uses: actions/upload-artifact@v4
+        with:
+          name: snapleaf-windows-x64
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 14

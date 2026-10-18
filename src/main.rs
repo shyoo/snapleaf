@@ -18,6 +18,7 @@ mod output;
 mod overlay;
 mod settings;
 mod ui;
+mod updates;
 
 use windows::Win32::Foundation::*;
 use windows::Win32::System::Com::*;

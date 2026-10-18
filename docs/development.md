@@ -57,39 +57,87 @@ Run these before committing:
 - `build.rs`, `snapleaf.manifest`, `assets/snapleaf.ico`: embed the manifest and multi-size EXE icon
   via the MSVC linker, without a resource compiler. `scripts/new-app-icon.ps1` recreates the icon
   artwork used by Explorer (run with Windows PowerShell 5.1).
-
+
+
 
 ## Local packaging
 
-Run `powershell -ExecutionPolicy Bypass -File scripts/release.ps1` to test, build,
-and package `dist/snapleaf.exe`, `snapleaf-<version>-x64.zip` and its SHA-256 checksum.
-The ZIP includes README and LICENSE. `-SkipTests` skips unit tests; `-StopRunning` exits
-copies running from this checkout's release or dist directories before rebuilding.
+`./scripts/release.ps1` tests, builds and packages the portable EXE and ZIP under gitignored
+`dist/`. Add `-Installer` to compile the per-user setup with Inno Setup 6.7.0 (put ISCC.exe
+on PATH). `-Version 0.2.0-rc.1` overrides the Cargo baseline for this build only; the same
+version is embedded in the app and used in installer metadata and filenames. No Cargo files
+are modified. `-SkipTests` skips unit tests; `-StopRunning` stops copies from this checkout.
 
-Settings are stored in `%APPDATA%\Snapleaf\settings.ini`. If absent, the app reads
-legacy `%APPDATA%\Snipper\settings.ini` preferences; subsequent saves use Snapleaf.
+The ZIP includes README and LICENSE. `SHA256SUMS.txt` covers the EXE, ZIP, and installer;
+the ZIP also has its own `.sha256`. Binaries and installers are unsigned.
+
+Installer identity and directory stay fixed across candidates and final versions:
+`%LOCALAPPDATA%/Programs/Snapleaf`. It registers an uninstaller and shortcuts, preserves
+preferences, and refuses installation/uninstallation while Snapleaf is running. Save your
+images and exit through the tray first. It does not add a startup task or force-close editors.
+
+Settings are stored in `%APPDATA%/Snapleaf/settings.ini`. If absent, the app reads
+legacy `%APPDATA%/Snipper/settings.ini` preferences; subsequent saves use Snapleaf.
 CLI flags: `--region`, `--window`, `--full`, and `--tray`.
 
 ## GitHub Actions and releases
 
-[Build and release](../.github/workflows/release.yml) uses a GitHub-hosted Windows x64 runner.
-Every branch push, pull request, and manual run tests, lints, and builds the portable package.
-The `snapleaf-windows-x64` artifact contains the EXE, ZIP, and ZIP checksum (14-day retention).
-No self-hosted runner or repository secrets are needed.
+[CI](../.github/workflows/ci.yml) tests, lints and packages the portable app and installer
+on GitHub-hosted Windows x64 runners for branch pushes, PRs and manual runs. Artifacts last
+14 days. No self-hosted runner or repository secrets are needed.
 
-To publish a release, set the Cargo.toml version, land that commit on main, and
-refresh Cargo.lock if needed, then create and push an annotated matching version tag:
+[Release](../.github/workflows/release.yml) builds annotated version tags on published main
+commits with successful main CI. The tag supplies the version (`SNAPLEAF_VERSION`) and its
+message supplies the release notes. Cargo's version remains the development baseline.
+Published assets include the setup installer, portable EXE/ZIP, checksums and GitHub build
+provenance attestations. Manual runs only upload artifacts. Only publishing gets write access.
+
+Use the repo's [.claude release skill](../.claude/skills/release/SKILL.md): `/release rc`
+(default patch; optional `minor` or `major`), install and verify the candidate, then
+`/release promote`. The scripts are also directly usable:
 
 ```powershell
-git tag -a v0.1.0 -m "Snapleaf 0.1.0"
-git push origin v0.1.0
+./scripts/release-tag.ps1 -Action plan -Release rc
+# Write user-facing notes to dist/release-notes.md, then:
+./scripts/release-tag.ps1 -Action cut -Release rc -NotesFile dist/release-notes.md -DryRun
+./scripts/release-tag.ps1 -Action cut -Release rc -NotesFile dist/release-notes.md
+# After installing and verifying the candidate:
+./scripts/release-tag.ps1 -Action plan -Release promote
+./scripts/release-tag.ps1 -Action cut -Release promote -NotesFile dist/release-notes.md -DryRun
+./scripts/release-tag.ps1 -Action cut -Release promote -NotesFile dist/release-notes.md
 ```
 
-The runner rejects tags that do not match Cargo.toml, are lightweight, or point outside
-main. Only a successful tag build publishes a GitHub Release with the EXE, ZIP, and checksum.
-Versions containing a hyphen (for example `0.2.0-rc.1`) become prereleases.
-Manual runs only upload artifacts. Release notes are generated from GitHub's commit/PR history.
-Only the publish job has permission to write repository contents. Binaries are unsigned.
+The helper fetches origin/main and tags, refuses dirty worktrees, unpublished local main
+commits, non-increasing versions and missing main CI. Promotion requires a published RC
+installer/checksums and tags the RC's own source commit even if main has advanced. A final
+rebuild embeds the final version, so the bytes differ from the RC. It never commits or pushes
+main. Land/publish work before cutting candidates. RCs are prereleases with `latest=false`;
+final tags publish as latest. Nothing publishes merely by adding this automation.
+
+## Updates
+
+Release builds poll GitHub's public stable `/releases/latest` endpoint after 30 seconds,
+then every six hours while running. Debug builds only check on demand. The menus offer a
+manual check and an automatic-download toggle (persisted as
+`%APPDATA%/Snapleaf/updates-disabled`). No token or GitHub login is needed. Network errors
+stay quiet for automatic checks; manual checks show errors. With no stable release, the menu
+reports that none has been published yet.
+
+A worker thread runs the embedded `scripts/update.ps1` in hidden Windows PowerShell 5.1;
+HTTP/JSON/SHA-256 use OS libraries, with no additional runtime dependency. Only HTTPS
+GitHub/asset-CDN URLs are accepted, including redirects. Responses and download time/size
+are bounded. Releases must be stable and newer; candidate-to-final ordering is supported.
+The exact versioned x64 setup asset and `SHA256SUMS.txt` must be present. Downloads are
+staged as `.part` files under `%LOCALAPPDATA%/Snapleaf/updates` and renamed only after
+verification; an existing verified installer is reused. Its checksum is checked again before
+opening it on the user's request. Snapleaf never silently runs an installer or exits editors.
+Portable users can install through this flow or replace their portable files themselves.
+
+`./scripts/test-release.ps1` runs offline version, URL and checksum tests plus mocked download
+fixtures covering verified download reuse, mismatches, prerelease filtering and current
+versions. Actual GitHub update/install coverage needs a published stable release; attestations
+are available through `gh attestation verify`, and are not verified by the updater.
+Checksums protect download integrity and rely on the GitHub repository as the trust source.
 
 ## Documentation screenshots
 

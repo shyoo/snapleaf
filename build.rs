@@ -42,6 +42,9 @@ fn embed_icon() {
 }
 
 fn main() {
+    println!("cargo:rerun-if-env-changed=SNAPLEAF_VERSION");
+    let version = env::var("SNAPLEAF_VERSION").unwrap_or_else(|_| env::var("CARGO_PKG_VERSION").unwrap());
+    println!("cargo:rustc-env=SNAPLEAF_VERSION={version}");
     println!("cargo:rerun-if-changed=snapleaf.manifest");
     println!("cargo:rerun-if-changed=assets/snapleaf.ico");
     if std::env::var("CARGO_CFG_TARGET_ENV").as_deref() == Ok("msvc") {

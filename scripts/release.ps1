@@ -20,7 +20,9 @@
 [CmdletBinding()]
 param(
     [switch]$SkipTests,
-    [switch]$StopRunning
+    [switch]$StopRunning,
+    [switch]$Installer,
+    [string]$Version = $env:SNAPLEAF_VERSION
 )
 
 $ErrorActionPreference = 'Stop'
@@ -46,7 +48,9 @@ if (-not $cargo) {
 
 $manifest = Get-Content (Join-Path $root 'Cargo.toml') -Raw
 if ($manifest -notmatch '(?m)^version\s*=\s*"([^"]+)"') { throw 'Could not read version from Cargo.toml' }
-$version = $Matches[1]
+. (Join-Path $PSScriptRoot 'version.ps1')
+$version = Get-SnapleafVersion $Version
+$env:SNAPLEAF_VERSION = $version
 
 $built = Join-Path $root 'target\release\snapleaf.exe'
 $dist = Join-Path $root 'dist'
@@ -82,6 +86,20 @@ if (Test-Path $zip) { Remove-Item $zip -Force }
 Compress-Archive -Path $exe, (Join-Path $root 'README.md'), (Join-Path $root 'LICENSE') -DestinationPath $zip
 $hash = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLower()
 Set-Content -Path "$zip.sha256" -Value "$hash  $(Split-Path -Leaf $zip)" -Encoding ascii
+
+if ($Installer) {
+    $iscc = (Get-Command ISCC.exe -ErrorAction SilentlyContinue).Source
+    if (-not $iscc) { $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" }
+    if (-not (Test-Path $iscc)) { throw 'Inno Setup 6 is required for -Installer (winget install JRSoftware.InnoSetup)' }
+    & $iscc "/DAppVersion=$version" (Join-Path $root 'installer/snapleaf.iss')
+    if ($LASTEXITCODE -ne 0) { throw 'Installer compilation failed' }
+}
+$files = @($exe, $zip)
+if ($Installer) { $files += Join-Path $dist "snapleaf-$version-x64-setup.exe" }
+$sums = foreach ($file in $files) {
+    '{0}  {1}' -f (Get-FileHash $file -Algorithm SHA256).Hash.ToLower(), (Split-Path -Leaf $file)
+}
+Set-Content (Join-Path $dist 'SHA256SUMS.txt') $sums -Encoding ascii
 
 $kb = [math]::Round((Get-Item $exe).Length / 1KB)
 Write-Host ''

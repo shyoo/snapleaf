@@ -14,12 +14,20 @@ Captures stay on your computer.
 
 ## Download
 
-Get the Windows x64 executable or portable ZIP from [Releases](https://github.com/shyoo/snapleaf/releases).
-Extract the ZIP and run **snapleaf.exe**. No installer or separate runtime is needed.
-Requires Windows 10 or 11.
+Get the Windows x64 **setup installer** or portable ZIP from [Releases](https://github.com/shyoo/snapleaf/releases).
+The installer adds Start menu and optional desktop shortcuts, and installs for your account
+without administrator access. For a portable copy, extract the ZIP and run **snapleaf.exe**.
+Requires Windows 10 or 11; no separate runtime is needed.
+
+Snapleaf checks for stable updates in the background and downloads the installer after verifying
+its SHA-256 checksum. Open it from **⋯ → Open downloaded update installer** when ready. Save your
+images and exit Snapleaf from the tray before installing. You can check manually or turn off
+automatic downloads from **⋯** or the tray menu. Preview releases are never downloaded
+automatically. Updating a portable copy through the installer creates an installed copy;
+you can instead download and extract the new portable ZIP.
 
 Development builds are available as `snapleaf-windows-x64` artifacts on successful
-[Actions runs](https://github.com/shyoo/snapleaf/actions/workflows/release.yml)
+[Actions runs](https://github.com/shyoo/snapleaf/actions/workflows/ci.yml)
 (sign in to GitHub to download them).
 
 ## Capture

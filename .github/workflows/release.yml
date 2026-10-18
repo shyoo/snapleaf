@@ -1,85 +1,95 @@
-name: Build and release
-
+name: Release
 on:
   push:
-    branches: ['**']
     tags: ['v*']
-  pull_request:
   workflow_dispatch:
-
 permissions:
   contents: read
-
+  actions: read
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: release-${{ github.ref }}
   cancel-in-progress: false
-
 jobs:
   build:
-    name: Windows x64
     runs-on: windows-latest
     timeout-minutes: 20
     defaults:
       run:
         shell: pwsh
+    env:
+      SNAPLEAF_VERSION: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
     steps:
       - uses: actions/checkout@v5
         with:
           fetch-depth: 0
-      - name: Validate release tag
-        if: startsWith(github.ref, 'refs/tags/')
+      - name: Validate annotated release tag and CI
+        if: github.ref_type == 'tag'
         env:
+          GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ github.ref_name }}
         run: |
-          $manifest = Get-Content Cargo.toml -Raw
-          if ($manifest -notmatch '(?m)^version\s*=\s*"([^"]+)"') { throw 'Missing Cargo version' }
-          if ($env:RELEASE_TAG -cne "v$($Matches[1])") { throw 'Tag must match Cargo.toml version' }
+          . ./scripts/version.ps1
+          $version = Get-SnapleafVersion $env:RELEASE_TAG
           git fetch --force origin "refs/tags/$env:RELEASE_TAG`:refs/tags/$env:RELEASE_TAG"
-          if ($LASTEXITCODE -ne 0) { throw 'Could not fetch release tag' }
-          if ((git cat-file -t "refs/tags/$env:RELEASE_TAG") -ne 'tag') { throw 'Use an annotated release tag' }
+          if ($LASTEXITCODE -ne 0) { throw 'Could not fetch tag' }
+          if ((git cat-file -t "refs/tags/$env:RELEASE_TAG") -ne 'tag') { throw 'Use an annotated tag' }
+          if (-not (git for-each-ref --format='%(contents)' "refs/tags/$env:RELEASE_TAG")) { throw 'Tag needs release notes' }
+          git fetch origin main
+          if ($LASTEXITCODE -ne 0) { throw 'Could not fetch main' }
           git merge-base --is-ancestor HEAD origin/main
           if ($LASTEXITCODE -ne 0) { throw 'Release commit must be on main' }
-      - name: Set up Rust MSVC
+          $sha = git rev-parse HEAD
+          $json = gh api "repos/$env:GITHUB_REPOSITORY/actions/workflows/ci.yml/runs?head_sha=$sha&event=push&per_page=100"
+          if ($LASTEXITCODE -ne 0) { throw 'Could not read CI runs' }
+          $runs = $json | ConvertFrom-Json
+          if (-not @($runs.workflow_runs | Where-Object { $_.head_branch -eq 'main' -and $_.conclusion -eq 'success' }).Count) { throw 'Main CI must pass on the tagged commit' }
+      - name: Set up Rust
         run: |
-          rustup toolchain install stable --profile minimal --component clippy
+          rustup toolchain install stable --profile minimal
           if ($LASTEXITCODE -ne 0) { throw 'Rust installation failed' }
           rustup default stable-x86_64-pc-windows-msvc
-          if ($LASTEXITCODE -ne 0) { throw 'Rust toolchain selection failed' }
-      - name: Test
-        run: cargo test --locked
-      - name: Lint
-        run: cargo clippy --locked
-      - name: Build and package
-        run: ./scripts/release.ps1 -SkipTests
+          if ($LASTEXITCODE -ne 0) { throw 'Rust selection failed' }
+      - name: Install Inno Setup
+        run: choco install innosetup --version=6.7.0 --no-progress -y
+      - name: Build installer and portable package
+        run: ./scripts/release.ps1 -Installer
       - uses: actions/upload-artifact@v4
         with:
           name: snapleaf-windows-x64
-          path: |
-            dist/snapleaf.exe
-            dist/snapleaf-*-x64.zip
-            dist/snapleaf-*-x64.zip.sha256
+          path: dist/*
           if-no-files-found: error
           retention-days: 14
-
   publish:
-    name: Publish GitHub release
-    if: startsWith(github.ref, 'refs/tags/')
+    if: github.ref_type == 'tag'
     needs: build
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
       contents: write
+      id-token: write
+      attestations: write
     steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
       - uses: actions/download-artifact@v4
         with:
           name: snapleaf-windows-x64
           path: dist
-      - name: Publish executable, ZIP, and checksum
+      - uses: actions/attest-build-provenance@v3
+        with:
+          subject-path: 'dist/*'
+      - name: Publish release with tag notes
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           RELEASE_TAG: ${{ github.ref_name }}
         run: |
-          flags=()
-          if [[ "$RELEASE_TAG" == *-* ]]; then flags+=(--prerelease); fi
-          gh release create "$RELEASE_TAG" dist/* --verify-tag --generate-notes "${flags[@]}"
+          set -euo pipefail
+          [[ "$RELEASE_TAG" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-rc\.[1-9][0-9]*)?$ ]]
+          git fetch --force origin "refs/tags/$RELEASE_TAG:refs/tags/$RELEASE_TAG"
+          git for-each-ref --format='%(contents)' "refs/tags/$RELEASE_TAG" > notes.md
+          (cd dist && sha256sum -c SHA256SUMS.txt)
+          flags=(--latest)
+          if [[ "$RELEASE_TAG" == *-rc.* ]]; then flags=(--prerelease --latest=false); fi
+          gh release create "$RELEASE_TAG" dist/* --verify-tag --title "Snapleaf $RELEASE_TAG" --notes-file notes.md "${flags[@]}"

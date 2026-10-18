@@ -35,6 +35,8 @@ const CMD_DELAY: usize = 200;
 const CMD_HOTKEY: usize = 300;
 const CMD_SNIP: usize = 400;
 const CMD_SHOW: usize = 500;
+const CMD_UPDATE: usize = 600;
+const CMD_AUTO_UPDATE: usize = 601;
 const CMD_EXIT: usize = 900;
 
 struct Launcher {
@@ -79,6 +81,7 @@ pub fn create(show: bool) -> Result<HWND> {
         SendMessageW(hwnd, WM_USER, Some(WPARAM(ok as usize)), None);
     }
     add_tray(hwnd);
+    unsafe { SetTimer(Some(hwnd), crate::updates::TIMER, 1000, None); }
     if show {
         unsafe {
             let _ = ShowWindow(hwnd, SW_SHOWNORMAL);
@@ -137,7 +140,7 @@ fn remove_tray(hwnd: HWND) {
     }
 }
 
-fn tray_balloon(hwnd: HWND, text: &str) {
+pub(crate) fn tray_balloon(hwnd: HWND, text: &str) {
     let mut nid = tray_data(hwnd);
     nid.uFlags |= NIF_INFO;
     copy_wide(&mut nid.szInfoTitle, "Snapleaf is still running");
@@ -211,6 +214,8 @@ pub fn run_command(hwnd: HWND, cmd: usize) {
         }
         c if (CMD_SNIP..CMD_SNIP + 3).contains(&c) => app::start(Mode::ALL[c - CMD_SNIP], 0),
         CMD_SHOW => app::show_launcher(),
+        CMD_UPDATE => crate::updates::check(true),
+        CMD_AUTO_UPDATE => crate::updates::toggle(),
         CMD_EXIT => {
             remove_tray(hwnd);
             unsafe { PostQuitMessage(0) };
@@ -228,6 +233,8 @@ fn tray_menu(hwnd: HWND) {
         .collect();
     items.push((0, String::new(), false));
     items.push((CMD_SHOW, "Show Snapleaf".into(), false));
+    items.push((CMD_UPDATE, crate::updates::label(), false));
+    items.push((CMD_AUTO_UPDATE, "Automatically download updates".into(), crate::updates::enabled()));
     items.extend(hotkey_items());
     items.push((0, String::new(), false));
     items.push((CMD_EXIT, "Exit".into(), false));
@@ -282,6 +289,8 @@ impl Launcher {
                 let mut v = hotkey_items();
                 v.push((0, String::new(), false));
                 v.push((CMD_EXIT, "Exit Snapleaf".into(), false));
+                v.push((CMD_UPDATE, crate::updates::label(), false));
+                v.push((CMD_AUTO_UPDATE, "Automatically download updates".into(), crate::updates::enabled()));
                 v
             }
             Btn::New => return,
@@ -430,6 +439,10 @@ impl Handler for Launcher {
                 Some(LRESULT(0))
             }
             WM_TIMER => {
+                if wp.0 == crate::updates::TIMER {
+                    crate::updates::tick(hwnd);
+                    return Some(LRESULT(0));
+                }
                 app::on_timer(wp.0);
                 Some(LRESULT(0))
             }
