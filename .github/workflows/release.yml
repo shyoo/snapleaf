@@ -1,0 +1,85 @@
+name: Build and release
+
+on:
+  push:
+    branches: ['**']
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Windows x64
+    runs-on: windows-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - name: Validate release tag
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          $manifest = Get-Content Cargo.toml -Raw
+          if ($manifest -notmatch '(?m)^version\s*=\s*"([^"]+)"') { throw 'Missing Cargo version' }
+          if ($env:RELEASE_TAG -cne "v$($Matches[1])") { throw 'Tag must match Cargo.toml version' }
+          git fetch --force origin "refs/tags/$env:RELEASE_TAG`:refs/tags/$env:RELEASE_TAG"
+          if ($LASTEXITCODE -ne 0) { throw 'Could not fetch release tag' }
+          if ((git cat-file -t "refs/tags/$env:RELEASE_TAG") -ne 'tag') { throw 'Use an annotated release tag' }
+          git merge-base --is-ancestor HEAD origin/main
+          if ($LASTEXITCODE -ne 0) { throw 'Release commit must be on main' }
+      - name: Set up Rust MSVC
+        run: |
+          rustup toolchain install stable --profile minimal --component clippy
+          if ($LASTEXITCODE -ne 0) { throw 'Rust installation failed' }
+          rustup default stable-x86_64-pc-windows-msvc
+          if ($LASTEXITCODE -ne 0) { throw 'Rust toolchain selection failed' }
+      - name: Test
+        run: cargo test --locked
+      - name: Lint
+        run: cargo clippy --locked
+      - name: Build and package
+        run: ./scripts/release.ps1 -SkipTests
+      - uses: actions/upload-artifact@v4
+        with:
+          name: snapleaf-windows-x64
+          path: |
+            dist/snapleaf.exe
+            dist/snapleaf-*-x64.zip
+            dist/snapleaf-*-x64.zip.sha256
+          if-no-files-found: error
+          retention-days: 14
+
+  publish:
+    name: Publish GitHub release
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: snapleaf-windows-x64
+          path: dist
+      - name: Publish executable, ZIP, and checksum
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          flags=()
+          if [[ "$RELEASE_TAG" == *-* ]]; then flags+=(--prerelease); fi
+          gh release create "$RELEASE_TAG" dist/* --verify-tag --generate-notes "${flags[@]}"

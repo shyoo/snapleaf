@@ -3,6 +3,8 @@ name = "snapleaf"
 version = "0.1.0"
 edition = "2024"
 description = "Lightweight Windows screen capture and markup tool"
+license = "Apache-2.0"
+repository = "https://github.com/shyoo/snapleaf"
 publish = false
 
 [dependencies.windows]

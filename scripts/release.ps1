@@ -67,11 +67,11 @@ if ($locked.Count -gt 0) {
 
 if (-not $SkipTests) {
     Step 'cargo test'
-    Invoke-Cargo test --quiet
+    Invoke-Cargo test --locked --quiet
 }
 
 Step "cargo build --release (v$version)"
-Invoke-Cargo build --release
+Invoke-Cargo build --release --locked
 
 Step 'Packaging'
 New-Item -ItemType Directory -Force $dist | Out-Null
@@ -79,7 +79,7 @@ $exe = Join-Path $dist 'snapleaf.exe'
 Copy-Item $built $exe -Force
 $zip = Join-Path $dist "snapleaf-$version-x64.zip"
 if (Test-Path $zip) { Remove-Item $zip -Force }
-Compress-Archive -Path $exe, (Join-Path $root 'README.md') -DestinationPath $zip
+Compress-Archive -Path $exe, (Join-Path $root 'README.md'), (Join-Path $root 'LICENSE') -DestinationPath $zip
 $hash = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLower()
 Set-Content -Path "$zip.sha256" -Value "$hash  $(Split-Path -Leaf $zip)" -Encoding ascii
 

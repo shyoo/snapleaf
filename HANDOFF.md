@@ -7,7 +7,24 @@
 The app is now **Snapleaf**. Cargo package/binary, manifest, Win32 window classes,
 single-instance mutex, UI titles, tray messages, build resources and release packaging
 use the new name. Releases are `dist/snapleaf.exe`, `snapleaf-0.1.0-x64.zip` and SHA-256.
-README includes the logo, usage, build instructions, shortcuts and favicon asset links.
+Public repository: https://github.com/shyoo/snapleaf (origin). Main currently has the
+Snapleaf rename at f3c9ddd8. The main checkout is C:\Dev\snapleaf; Git worktree links
+were repaired and Warmstart is bound to the new directory.
+
+This task branch prepares the public docs and release automation:
+- README focuses on download, capture, annotation and sharing, with three real screenshots
+  of the launcher, region selection and editor. The demo includes Snapleaf's logo and a
+  captured launcher image. No AI-generated UI is used.
+- Contributor details, icon assets, settings and release instructions moved to
+  docs/development.md. Apache 2.0 LICENSE and Cargo license/repository metadata added.
+- scripts/release.ps1 uses the lockfile and includes LICENSE in the ZIP.
+- .github/workflows/release.yml tests, lints and packages on a GitHub-hosted Windows x64
+  runner for branch pushes, PRs and manual runs; artifacts last 14 days. Matching annotated
+  version tags on main also publish EXE, ZIP and checksum as a GitHub Release. Hyphenated
+  versions become prereleases. No release tag has been created for this task.
+- Local checks: 10 tests pass; Clippy has only the two existing warnings; release packaging,
+  ZIP contents/checksum, screenshot inspection and actionlint pass. Remote build verification
+  follows the task-branch push; see its Actions run for authoritative status.
 
 - Branding: `assets/snapleaf.svg` is the leaf/capture-frame design. PNGs cover favicons
   (16/32), touch (180), and project images (192/512). `snapleaf.ico` contains nine frames
@@ -26,13 +43,12 @@ README includes the logo, usage, build instructions, shortcuts and favicon asset
   and no new warnings; cargo build --release and scripts/release.ps1 pass. Windows loaded
   all nine embedded icon sizes; PNG dimensions and release ZIP entries were checked.
 
-## Workspace and directory rename
+## Workspace
 
-This branch lives in a Warmstart-managed pooled worktree. The user authorized landing,
-then moving the main checkout from `C:\Dev\snipper` to `C:\Dev\snapleaf`.
-After the move, repair Git worktree links and verify them. The user will rebind the
-project in Warmstart when prompted; do not edit Warmstart's project.json manually.
-No GitHub remote is configured, and nothing has been published.
+This branch lives in a Warmstart-managed pooled worktree. The earlier rename landed and
+was pushed to origin/main. Do not edit Warmstart's project.json manually. The current
+finish policy is await-human, local commit-and-merge; publishing this task branch for
+runner verification does not land it on main.
 
 ## What is unproven
 
@@ -46,6 +62,6 @@ No GitHub remote is configured, and nothing has been published.
 
 ## Next
 
-1. Land the Snapleaf rename, move the main checkout and repair Git worktree links.
-2. User rebinds Warmstart to `C:\Dev\snapleaf` when prompted.
-3. User tries Snapleaf; configure a public GitHub repository when requested.
+1. Land the public docs/license/release workflow when requested, then push main as authorized.
+2. Create a matching annotated version tag when a public release is requested.
+3. Complete live app checks listed above as needed.
