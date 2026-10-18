@@ -4,12 +4,22 @@
 
 ## Where things stand
 
-v1 of the capture + markup tool is on `main` and the user reports it works well. This branch
-adds a font choice for text annotations. See README for features and layout.
+v1 of the capture + markup tool and text font choices are on `main`. This branch fixes
+the missing EXE icon and Snipper editors appearing in subsequent captures. See README for
+features and layout.
 
 - Capture: rectangle, window and full screen across all monitors, with a 0/3/5/10 s countdown.
   Global hotkey is configurable (default Ctrl+Print Screen). Tray icon, single instance, and
   `--region/--window/--full/--tray` flags.
+  All visible Snipper windows on the UI thread now hide before capture, not just the launcher.
+  A repaint delay plus DwmFlush precedes the freeze. Existing editors return without activation
+  on success, cancellation or failure; the launcher returns on cancel/failure if it was open.
+  Requests to show the launcher during capture are ignored. Pipeline borrows remain brief
+  and separate from reentrant Win32 calls.
+- EXE icon: `assets/snipper.ico` contains 16/20/24/32/40/48/64/128/256 px variants of the existing
+  runtime artwork. `build.rs` writes native icon resources into OUT_DIR and links them without
+  a resource compiler or new dependencies. Recreate the source asset with Windows PowerShell
+  5.1: `scripts/new-app-icon.ps1`. Runtime window/tray drawing remains DPI-sized.
 - Editor: rectangle (outline), arrow, text (with IME), highlighter, pen, crop. Shapes are
   editable (select, move, handles, recolour/resize). Undo/redo, zoom/pan. Auto-copy on open,
   Ctrl+C copies the flattened image as CF_DIB + PNG, Ctrl+S saves PNG. Settings persist in
@@ -33,6 +43,13 @@ Font change was verified live by driving the font menu and the font dialog: Geor
 italic, then Consolas through More fonts…. The result rendered on screen and in the flattened
 clipboard image, Korean fell back cleanly, and the setting persisted.
 
+Capture/icon fixes passed all 10 unit tests, cargo clippy (the same three existing warnings),
+and cargo build --release. Live testing used an isolated copy with a distinct single-instance
+mutex, leaving the running installed app alone: Windows extracted large and small EXE icons;
+a delayed full capture revealed a lime test window behind the editor in the clipboard pixels;
+two editors hid/restored in rectangle and window modes; overlay and countdown cancellation
+restored the editors and launcher; showing the launcher during capture stayed suppressed.
+
 ## What is unproven
 
 - Real keyboard IME composition (Korean syllable-by-syllable display). Only WM_CHAR text was
@@ -46,6 +63,6 @@ clipboard image, Korean fell back cleanly, and the setting persisted.
 
 ## Next
 
-1. User tries the font button. Fix what they find.
-2. Nice-to-haves if wanted: an embedded .exe icon, Ctrl+V to paste an image into a new editor,
+1. User tries the updated release, including capturing with existing editors open.
+2. Nice-to-haves if wanted: Ctrl+V to paste an image into a new editor,
    text outline/background for readability, free font size, step-number badges, blur/pixelate.

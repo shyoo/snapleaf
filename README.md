@@ -47,6 +47,8 @@ Only one instance runs at a time. Launching again forwards the request to the ru
   exits. Closing the launcher keeps Snipper in the tray.
 - **Overlay:** drag to select, or in window mode click a highlighted window. The bar at the top
   switches mode (keys R / W / F). Esc or right-click cancels.
+- Snipper hides its launcher and open editors during capture so they do not cover the subject.
+  Existing editors return afterward; cancelling also brings back the launcher if it was open.
 - **Editor:** the capture is copied to the clipboard as soon as it opens.
 
 | Key | Action |
@@ -92,7 +94,9 @@ Run these before committing:
 - `src/output.rs`: clipboard (CF_DIB + PNG), save dialog, PNG files.
 - `src/settings.rs`: persisted preferences.
 - `scripts/release.ps1`: test, build and package into `dist/` (gitignored).
-- `build.rs`, `snipper.manifest`: embed the DPI/common-controls manifest via the MSVC linker.
+- `build.rs`, `snipper.manifest`, `assets/snipper.ico`: embed the manifest and multi-size EXE icon
+  via the MSVC linker, without a resource compiler. `scripts/new-app-icon.ps1` recreates the icon
+  artwork used by Explorer (run with Windows PowerShell 5.1).
 
 ---
 
