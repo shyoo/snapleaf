@@ -1,4 +1,4 @@
-//! The capture pipeline: hide Snipper's windows, count down, freeze the screen,
+//! The capture pipeline: hide Snapleaf's windows, count down, freeze the screen,
 //! let the user pick, then open an editor. Timers run on the launcher window,
 //! which doubles as the app's message host (tray, hotkey, single instance).
 

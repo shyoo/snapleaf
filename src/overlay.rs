@@ -85,8 +85,8 @@ pub fn show(frozen: Frozen, mode: Mode) -> Result<HWND> {
     };
     let hwnd = ui::create_window(
         WindowSpec {
-            class: w!("SnipperOverlay"),
-            title: "Snipper",
+            class: w!("SnapleafOverlay"),
+            title: "Snapleaf",
             style: WS_POPUP,
             ex: WS_EX_TOPMOST | WS_EX_TOOLWINDOW,
             rect: (origin.x as i32, origin.y as i32, w, h),

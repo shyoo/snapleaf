@@ -1,29 +1,40 @@
-# snipper
+<p align="center">
+  <img src="assets/snapleaf-192.png" alt="Snapleaf leaf and capture frame icon" width="96" height="96">
+</p>
 
-> A tiny native screen capture and markup tool for Windows: snip, mark up, Ctrl+C, paste.
+# Snapleaf
+
+> A tiny native screenshot and markup tool for Windows. Capture, annotate, copy.
 
 ## What it is
 
-Snipper is a ~300 KB single-file Rust executable for Windows 10/11. It takes a screenshot of a
+Snapleaf is a small, portable Rust executable for Windows 10/11. It takes a screenshot of a
 dragged rectangle, a window, or the full screen, optionally after a 3/5/10 second countdown. It
 then opens the snip in a small editor where you can add outline rectangles, arrows, text,
 highlighter boxes and freehand pen strokes, and crop. **Ctrl+C** puts the flattened image on the
 clipboard (as a DIB and as PNG), so it pastes into Warmstart, Office, Slack, browsers and so on.
 **Ctrl+S** saves a PNG.
 
-It is not a screen recorder, has no cloud upload, and has no scrolling capture.
+Captures stay on your computer. There is no cloud upload, screen recording, or scrolling capture.
 
 The UI is plain Win32 drawn with Direct2D/DirectWrite. It follows the system light or dark
-theme, is per-monitor DPI aware, and works across multiple monitors. The only dependency is the
-`windows` crate.
+theme, is per-monitor DPI aware, and works across multiple monitors. It uses the `windows`
+and `windows-numerics` crates and needs no separate runtime installation.
 
 ## Getting started
+
+Run `snapleaf.exe` to open the launcher. Use **New** to capture, add your annotations,
+then press **Ctrl+C** to copy or **Ctrl+S** to save a PNG. Closing the launcher keeps
+Snapleaf available in the notification area; use **Exit Snapleaf** in its tray menu to quit.
+Windows may initially place the tray icon in the overflow menu.
+
+### Build from source
 
 Requires the Rust MSVC toolchain (`rustup default stable-x86_64-pc-windows-msvc`) and the Visual
 Studio C++ build tools.
 
-To produce a release (runs the tests, then writes `dist\snipper.exe` and
-`dist\snipper-<version>-x64.zip` with a `.sha256`):
+To produce a release (runs the tests, then writes `dist\snapleaf.exe` and
+`dist\snapleaf-<version>-x64.zip` with a `.sha256`):
 
 ```
 powershell -ExecutionPolicy Bypass -File scripts\release.ps1   # -SkipTests, -StopRunning
@@ -33,9 +44,9 @@ Or build by hand:
 
 ```
 cargo build --release
-target\release\snipper.exe            # launcher window + tray icon
-target\release\snipper.exe --region   # start a rectangle snip immediately (also --window, --full)
-target\release\snipper.exe --tray     # start hidden in the tray (e.g. from shell:startup)
+target\release\snapleaf.exe            # launcher window + tray icon
+target\release\snapleaf.exe --region   # start a rectangle snip immediately (also --window, --full)
+target\release\snapleaf.exe --tray     # start hidden in the tray (e.g. from shell:startup)
 ```
 
 Only one instance runs at a time. Launching again forwards the request to the running one.
@@ -44,10 +55,10 @@ Only one instance runs at a time. Launching again forwards the request to the ru
 
 - **Launcher:** **New** starts a snip. The two dropdowns pick the mode (Rectangle / Window /
   Full screen) and the delay. **⋯** picks the global shortcut (default **Ctrl+Print Screen**) or
-  exits. Closing the launcher keeps Snipper in the tray.
+  exits. Closing the launcher keeps Snapleaf in the tray.
 - **Overlay:** drag to select, or in window mode click a highlighted window. The bar at the top
   switches mode (keys R / W / F). Esc or right-click cancels.
-- Snipper hides its launcher and open editors during capture so they do not cover the subject.
+- Snapleaf hides its launcher and open editors during capture so they do not cover the subject.
   Existing editors return afterward; cancelling also brings back the launcher if it was open.
 - **Editor:** the capture is copied to the clipboard as soon as it opens.
 
@@ -68,7 +79,37 @@ toolbar. Double-click text to edit it. Text entry supports IME input (e.g. Korea
 button picks the typeface for the selected text, or for new text while the Text tool is active.
 It offers common Windows fonts, Bold, Italic, and **More fonts…** (the system font dialog). You
 can change the font mid-typing without ending the edit. Settings (mode, delay, shortcut, per-tool
-colour and size, text font, last save folder) live in `%APPDATA%\Snipper\settings.ini`.
+colour and size, text font, last save folder) live in `%APPDATA%\Snapleaf\settings.ini`.
+If that file does not exist, Snapleaf reads `%APPDATA%\Snipper\settings.ini` to carry forward
+preferences from the previous name. Future changes save to the Snapleaf folder.
+
+## Icon and favicon assets
+
+The Snapleaf mark pairs a pale green leaf with white capture corners on a green tile.
+The same icon appears in Explorer, the tray, and window title bars.
+
+| Asset | Use |
+| --- | --- |
+| [`snapleaf.svg`](assets/snapleaf.svg) | Scalable logo |
+| [`snapleaf.ico`](assets/snapleaf.ico) | Windows app icon, 16–256 px |
+| [`favicon.ico`](assets/favicon.ico) | Web favicon, 16/32/48 px |
+| [`favicon-16x16.png`](assets/favicon-16x16.png), [`favicon-32x32.png`](assets/favicon-32x32.png) | PNG favicons |
+| [`apple-touch-icon.png`](assets/apple-touch-icon.png) | 180 px touch icon |
+| [`snapleaf-192.png`](assets/snapleaf-192.png), [`snapleaf-512.png`](assets/snapleaf-512.png) | Larger app and project images |
+
+For a website, copy the assets to its public directory and reference them in the page head:
+
+```html
+<link rel="icon" href="/assets/favicon.ico" sizes="any">
+<link rel="icon" href="/assets/snapleaf.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/assets/apple-touch-icon.png">
+```
+
+Recreate the PNG and ICO files with Windows PowerShell 5.1:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\new-app-icon.ps1
+```
 
 ## Checks
 
@@ -90,11 +131,11 @@ Run these before committing:
 - `src/doc.rs`: shapes, hit testing, handles, undo/redo, flattening.
 - `src/fonts.rs`: font menu choices and the system font dialog, mapped to DirectWrite families.
 - `src/gfx.rs`: Direct2D/DirectWrite/WIC helpers, off-screen render, PNG encode.
-- `src/ui.rs`: window plumbing, theme, vector icons, buttons, menus, runtime app icon.
+- `src/ui.rs`: window plumbing, theme, vector icons, buttons, menus, DPI-sized app icon loading.
 - `src/output.rs`: clipboard (CF_DIB + PNG), save dialog, PNG files.
 - `src/settings.rs`: persisted preferences.
 - `scripts/release.ps1`: test, build and package into `dist/` (gitignored).
-- `build.rs`, `snipper.manifest`, `assets/snipper.ico`: embed the manifest and multi-size EXE icon
+- `build.rs`, `snapleaf.manifest`, `assets/snapleaf.ico`: embed the manifest and multi-size EXE icon
   via the MSVC linker, without a resource compiler. `scripts/new-app-icon.ps1` recreates the icon
   artwork used by Explorer (run with Windows PowerShell 5.1).
 

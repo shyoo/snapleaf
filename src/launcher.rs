@@ -16,7 +16,7 @@ use crate::gfx::*;
 use crate::settings::{self, DELAYS, Hotkey, Mode};
 use crate::ui::{self, Button, ButtonState, Handler, Icon, Look, WindowSpec};
 
-pub const CLASS: PCWSTR = w!("SnipperLauncher");
+pub const CLASS: PCWSTR = w!("SnapleafLauncher");
 
 const CLIENT_W: f32 = 430.0;
 const CLIENT_H: f32 = 92.0;
@@ -55,7 +55,7 @@ pub fn create(show: bool) -> Result<HWND> {
     let hwnd = ui::create_window(
         WindowSpec {
             class: CLASS,
-            title: "Snipper",
+            title: "Snapleaf",
             style: WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX,
             ex: WINDOW_EX_STYLE(0),
             rect: (x, y, w, h),
@@ -106,7 +106,7 @@ fn tray_data(hwnd: HWND) -> NOTIFYICONDATAW {
         hIcon: ui::app_icon(ui::small_icon_size()),
         ..Default::default()
     };
-    copy_wide(&mut nid.szTip, &format!("Snipper — {}", hotkey_hint()));
+    copy_wide(&mut nid.szTip, &format!("Snapleaf — {}", hotkey_hint()));
     nid
 }
 
@@ -140,7 +140,7 @@ fn remove_tray(hwnd: HWND) {
 fn tray_balloon(hwnd: HWND, text: &str) {
     let mut nid = tray_data(hwnd);
     nid.uFlags |= NIF_INFO;
-    copy_wide(&mut nid.szInfoTitle, "Snipper is still running");
+    copy_wide(&mut nid.szInfoTitle, "Snapleaf is still running");
     copy_wide(&mut nid.szInfo, text);
     nid.dwInfoFlags = NIIF_INFO;
     unsafe {
@@ -227,7 +227,7 @@ fn tray_menu(hwnd: HWND) {
         .map(|(i, m)| (CMD_SNIP + i, format!("{} snip", m.label()), false))
         .collect();
     items.push((0, String::new(), false));
-    items.push((CMD_SHOW, "Show Snipper".into(), false));
+    items.push((CMD_SHOW, "Show Snapleaf".into(), false));
     items.extend(hotkey_items());
     items.push((0, String::new(), false));
     items.push((CMD_EXIT, "Exit".into(), false));
@@ -281,7 +281,7 @@ impl Launcher {
             Btn::More => {
                 let mut v = hotkey_items();
                 v.push((0, String::new(), false));
-                v.push((CMD_EXIT, "Exit Snipper".into(), false));
+                v.push((CMD_EXIT, "Exit Snapleaf".into(), false));
                 v
             }
             Btn::New => return,
@@ -309,12 +309,12 @@ impl Launcher {
         }
         let hint = text_format(12.0 * s, DWRITE_FONT_WEIGHT_NORMAL)?;
         let msg = if self.hotkey_ok {
-            format!("Press {} from anywhere. Close this window to keep Snipper in the tray.", hotkey_hint().trim_end_matches(" to snip"))
+            format!("Press {} from anywhere. Close this window to keep Snapleaf in the tray.", hotkey_hint().trim_end_matches(" to snip"))
         } else {
             format!("{} is used by another app — pick another shortcut under ⋯", settings::get().hotkey.label())
         };
         let msg = if settings::get().hotkey == Hotkey::Off {
-            "Close this window to keep Snipper in the tray.".to_string()
+            "Close this window to keep Snapleaf in the tray.".to_string()
         } else {
             msg
         };

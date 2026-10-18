@@ -1,4 +1,4 @@
-//! Persisted preferences: `%APPDATA%\Snipper\settings.ini`, plain `key=value`.
+//! Persisted preferences: `%APPDATA%\Snapleaf\settings.ini`, plain `key=value`.
 
 use std::cell::RefCell;
 use std::path::PathBuf;
@@ -137,11 +137,18 @@ pub fn update(f: impl FnOnce(&mut Settings)) {
 
 fn path() -> Option<PathBuf> {
     let base = std::env::var_os("APPDATA")?;
-    Some(PathBuf::from(base).join("Snipper").join("settings.ini"))
+    Some(PathBuf::from(base).join("Snapleaf").join("settings.ini"))
 }
 
 fn load() -> Settings {
-    let text = path().and_then(|p| std::fs::read_to_string(p).ok()).unwrap_or_default();
+    // Carry existing preferences forward on the first launch under the new name.
+    // Saves always go to Snapleaf; the old file stays untouched.
+    let text = path().and_then(|p| {
+        std::fs::read_to_string(&p).ok().or_else(|| {
+            let legacy = p.parent()?.parent()?.join("Snipper").join("settings.ini");
+            std::fs::read_to_string(legacy).ok()
+        })
+    }).unwrap_or_default();
     parse(&text)
 }
 

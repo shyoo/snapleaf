@@ -1,5 +1,5 @@
 [package]
-name = "snipper"
+name = "snapleaf"
 version = "0.1.0"
 edition = "2024"
 description = "Lightweight Windows screen capture and markup tool"

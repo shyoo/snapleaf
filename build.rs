@@ -21,7 +21,7 @@ fn resource(out: &mut Vec<u8>, kind: u16, id: u16, data: &[u8]) {
 }
 
 fn embed_icon() {
-    let ico = fs::read("assets/snipper.ico").expect("read application icon");
+    let ico = fs::read("assets/snapleaf.ico").expect("read application icon");
     assert_eq!(&ico[..4], &[0, 0, 1, 0], "expected an ICO file");
     let count = u16::from_le_bytes(ico[4..6].try_into().unwrap());
     let mut res = Vec::new();
@@ -36,17 +36,17 @@ fn embed_icon() {
         group.extend_from_slice(&(i + 1).to_le_bytes());
     }
     resource(&mut res, 14, 1, &group);
-    let path = Path::new(&env::var_os("OUT_DIR").unwrap()).join("snipper.res");
+    let path = Path::new(&env::var_os("OUT_DIR").unwrap()).join("snapleaf.res");
     fs::write(&path, res).expect("write icon resources");
     println!("cargo:rustc-link-arg-bins={}", path.display());
 }
 
 fn main() {
-    println!("cargo:rerun-if-changed=snipper.manifest");
-    println!("cargo:rerun-if-changed=assets/snipper.ico");
+    println!("cargo:rerun-if-changed=snapleaf.manifest");
+    println!("cargo:rerun-if-changed=assets/snapleaf.ico");
     if std::env::var("CARGO_CFG_TARGET_ENV").as_deref() == Ok("msvc") {
         let dir = std::env::var("CARGO_MANIFEST_DIR").unwrap();
-        let manifest = std::path::Path::new(&dir).join("snipper.manifest");
+        let manifest = std::path::Path::new(&dir).join("snapleaf.manifest");
         println!("cargo:rustc-link-arg-bins=/MANIFEST:EMBED");
         println!("cargo:rustc-link-arg-bins=/MANIFESTINPUT:{}", manifest.display());
         embed_icon();

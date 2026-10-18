@@ -1,6 +1,6 @@
-//! Snipper: a small screen capture and markup tool for Windows.
+//! Snapleaf: a small screen capture and markup tool for Windows.
 //!
-//! `snipper` opens the launcher; `--region`, `--window` or `--full` start a
+//! `snapleaf` opens the launcher; `--region`, `--window` or `--full` start a
 //! capture straight away; `--tray` starts hidden in the notification area.
 
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
@@ -44,7 +44,7 @@ fn main() {
     let tray_only = arg.as_deref() == Some("--tray");
 
     // One instance owns the tray icon and hotkey; later launches forward to it.
-    let _mutex = unsafe { CreateMutexW(None, false, w!(r"Local\Snipper.SingleInstance")) };
+    let _mutex = unsafe { CreateMutexW(None, false, w!(r"Local\Snapleaf.SingleInstance")) };
     if unsafe { GetLastError() } == ERROR_ALREADY_EXISTS {
         if let Ok(host) = unsafe { FindWindowW(launcher::CLASS, PCWSTR::null()) } {
             unsafe {
@@ -62,7 +62,7 @@ fn main() {
     }
 
     if let Err(e) = launcher::create(start.is_none() && !tray_only) {
-        ui::message_box(None, &format!("Snipper could not start: {}", e.message()), MB_ICONERROR);
+        ui::message_box(None, &format!("Snapleaf could not start: {}", e.message()), MB_ICONERROR);
         return;
     }
     if let Some(m) = start {

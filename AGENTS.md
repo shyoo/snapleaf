@@ -1,4 +1,4 @@
-# snipper — agent guide
+# snapleaf — agent guide
 
 How to work in this codebase. Read [`HANDOFF.md`](HANDOFF.md) first: it is the only file that
 carries current state.

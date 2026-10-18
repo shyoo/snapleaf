@@ -5,13 +5,9 @@ use std::cell::Cell;
 use std::ffi::c_void;
 
 use windows::Win32::Foundation::*;
-use windows::Win32::Graphics::Direct2D::Common::*;
-use windows::Win32::Graphics::Direct2D::*;
 use windows::Win32::Graphics::DirectWrite::*;
 use windows::Win32::Graphics::Dwm::*;
-use windows::Win32::Graphics::Dxgi::Common::*;
 use windows::Win32::Graphics::Gdi::*;
-use windows::Win32::Graphics::Imaging::*;
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows::Win32::System::Registry::*;
 use windows::Win32::UI::HiDpi::{GetDpiForSystem, GetDpiForWindow, GetSystemMetricsForDpi};
@@ -246,7 +242,7 @@ pub fn cursor_monitor() -> (Rect, f32) {
 }
 
 pub fn message_box(owner: Option<HWND>, text: &str, flags: MESSAGEBOX_STYLE) -> MESSAGEBOX_RESULT {
-    unsafe { MessageBoxW(owner, &HSTRING::from(text), w!("Snipper"), flags) }
+    unsafe { MessageBoxW(owner, &HSTRING::from(text), w!("Snapleaf"), flags) }
 }
 
 // ---------------------------------------------------------------- theme
@@ -627,8 +623,7 @@ thread_local! {
     static ICONS: std::cell::RefCell<Vec<(i32, HICON)>> = const { std::cell::RefCell::new(Vec::new()) };
 }
 
-/// The Snipper icon at exactly `size` pixels, drawn at runtime: a rounded
-/// accent tile with selection corners and a red markup arrow.
+/// The Snapleaf leaf and capture-frame icon, loaded at the system DPI size.
 pub fn app_icon(size: i32) -> HICON {
     if let Some(icon) = ICONS.with(|c| c.borrow().iter().find(|(s, _)| *s == size).map(|(_, i)| *i)) {
         return icon;
@@ -649,70 +644,10 @@ pub fn large_icon_size() -> i32 {
 }
 
 fn make_icon(n: u32) -> Result<HICON> {
+    // Resource 1 is also the Explorer icon. Windows picks the closest embedded
+    // frame, keeping tray, title bar and executable artwork in sync.
     unsafe {
-        let g = gfx();
-        let bmp = g.wic.CreateBitmap(n, n, &GUID_WICPixelFormat32bppPBGRA, WICBitmapCacheOnLoad)?;
-        let props = D2D1_RENDER_TARGET_PROPERTIES {
-            r#type: D2D1_RENDER_TARGET_TYPE_SOFTWARE,
-            pixelFormat: D2D1_PIXEL_FORMAT { format: DXGI_FORMAT_B8G8R8A8_UNORM, alphaMode: D2D1_ALPHA_MODE_PREMULTIPLIED },
-            dpiX: 96.0,
-            dpiY: 96.0,
-            usage: D2D1_RENDER_TARGET_USAGE_NONE,
-            minLevel: D2D1_FEATURE_LEVEL_DEFAULT,
-        };
-        let rt = g.d2d.CreateWicBitmapRenderTarget(&bmp, &props)?;
-        rt.BeginDraw();
-        rt.Clear(Some(&D2D1_COLOR_F { r: 0.0, g: 0.0, b: 0.0, a: 0.0 }));
-        {
-            let c = Canvas::new(&rt)?;
-            let f = n as f32;
-            let k = f / 32.0;
-            c.fill_round(Rect::new(1.0 * k, 1.0 * k, f - 1.0 * k, f - 1.0 * k), 7.0 * k, Color(0x0067C0), 1.0);
-            let w = 2.4 * k;
-            let (a, b) = (7.0 * k, f - 7.0 * k);
-            let len = 6.0 * k;
-            for (x, y, dx, dy) in [(a, a, 1.0, 1.0), (b, a, -1.0, 1.0), (a, b, 1.0, -1.0), (b, b, -1.0, -1.0)] {
-                c.line(pt(x, y), pt(x + dx * len, y), Color::WHITE, 1.0, w);
-                c.line(pt(x, y), pt(x, y + dy * len), Color::WHITE, 1.0, w);
-            }
-            c.line(pt(11.0 * k, 21.0 * k), pt(18.5 * k, 13.5 * k), Color(0xFF5252), 1.0, 2.6 * k);
-            if let Ok(head) = poly(&[pt(22.5 * k, 9.5 * k), pt(14.5 * k, 12.0 * k), pt(20.0 * k, 17.5 * k)], true, true) {
-                c.fill_geom(&head, Color(0xFF5252), 1.0);
-            }
-        }
-        rt.EndDraw(None, None)?;
-        drop(rt);
-
-        let lock = bmp.Lock(&WICRect { X: 0, Y: 0, Width: n as i32, Height: n as i32 }, WICBitmapLockRead.0 as u32)?;
-        let stride = lock.GetStride()? as usize;
-        let mut len = 0u32;
-        let mut data = std::ptr::null_mut();
-        lock.GetDataPointer(&mut len, &mut data)?;
-        let src = std::slice::from_raw_parts(data, len as usize);
-        // Icons want straight (not premultiplied) alpha.
-        let mut px = vec![0u8; (n * n * 4) as usize];
-        for y in 0..n as usize {
-            for x in 0..n as usize {
-                let s = &src[y * stride + x * 4..y * stride + x * 4 + 4];
-                let d = &mut px[(y * n as usize + x) * 4..(y * n as usize + x) * 4 + 4];
-                let a = s[3] as u32;
-                if a > 0 {
-                    for i in 0..3 {
-                        d[i] = ((s[i] as u32 * 255 + a / 2) / a).min(255) as u8;
-                    }
-                }
-                d[3] = s[3];
-            }
-        }
-        drop(lock);
-
-        let color = CreateBitmap(n as i32, n as i32, 1, 32, Some(px.as_ptr() as *const c_void));
-        let mask_bits = vec![0u8; (n.div_ceil(16) * 2 * n) as usize];
-        let mask = CreateBitmap(n as i32, n as i32, 1, 1, Some(mask_bits.as_ptr() as *const c_void));
-        let info = ICONINFO { fIcon: true.into(), xHotspot: 0, yHotspot: 0, hbmMask: mask, hbmColor: color };
-        let icon = CreateIconIndirect(&info);
-        let _ = DeleteObject(color.into());
-        let _ = DeleteObject(mask.into());
-        icon
+        LoadImageW(Some(hinstance()), PCWSTR(std::ptr::without_provenance(1)), IMAGE_ICON, n as i32, n as i32, LR_DEFAULTCOLOR)
+            .map(|handle| HICON(handle.0))
     }
 }

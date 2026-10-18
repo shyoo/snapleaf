@@ -122,7 +122,7 @@ struct Editor {
 
 pub fn open(img: Image) -> Result<()> {
     let (work, scale) = ui::cursor_monitor();
-    let title = format!("Snipper — {} × {}", img.w, img.h);
+    let title = format!("Snapleaf — {} × {}", img.w, img.h);
     let min_w = toolbar_min_width(scale);
     let cw = (img.w as f32 + 2.0 * MARGIN * scale).max(min_w);
     let ch = img.h as f32 + (TOOLBAR_H + STATUS_H + 2.0 * MARGIN) * scale;
@@ -161,7 +161,7 @@ pub fn open(img: Image) -> Result<()> {
     };
     let hwnd = ui::create_window(
         WindowSpec {
-            class: w!("SnipperEditor"),
+            class: w!("SnapleafEditor"),
             title: &title,
             style: WS_OVERLAPPEDWINDOW,
             ex: WINDOW_EX_STYLE(0),
@@ -219,7 +219,7 @@ impl Editor {
     fn update_view(&mut self, hwnd: HWND) {
         let cv = self.canvas(hwnd);
         let crop = self.doc.state.crop;
-        let title = format!("Snipper — {} × {}", crop.w() as i32, crop.h() as i32);
+        let title = format!("Snapleaf — {} × {}", crop.w() as i32, crop.h() as i32);
         if title != self.title {
             unsafe {
                 let _ = SetWindowTextW(hwnd, &HSTRING::from(title.as_str()));

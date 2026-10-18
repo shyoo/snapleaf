@@ -25,8 +25,8 @@ pub fn show(seconds: u32) -> Result<HWND> {
     let c = work.center();
     let hwnd = ui::create_window(
         WindowSpec {
-            class: w!("SnipperCountdown"),
-            title: "Snipper countdown",
+            class: w!("SnapleafCountdown"),
+            title: "Snapleaf countdown",
             style: WS_POPUP,
             ex: WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE,
             rect: (c.x as i32 - size / 2, c.y as i32 - size / 2, size, size),

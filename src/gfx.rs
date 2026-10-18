@@ -32,7 +32,7 @@ thread_local! {
     static GFX: &'static Gfx = Box::leak(Box::new(Gfx::new().expect("graphics initialisation failed")));
 }
 
-/// The UI thread's graphics factories. Everything in Snipper runs on one thread.
+/// The UI thread's graphics factories. Everything in Snapleaf runs on one thread.
 pub fn gfx() -> &'static Gfx {
     GFX.with(|g| *g)
 }
