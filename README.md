@@ -22,6 +22,15 @@ theme, is per-monitor DPI aware, and works across multiple monitors. The only de
 Requires the Rust MSVC toolchain (`rustup default stable-x86_64-pc-windows-msvc`) and the Visual
 Studio C++ build tools.
 
+To produce a release (runs the tests, then writes `dist\snipper.exe` and
+`dist\snipper-<version>-x64.zip` with a `.sha256`):
+
+```
+powershell -ExecutionPolicy Bypass -File scripts\release.ps1   # -SkipTests, -StopRunning
+```
+
+Or build by hand:
+
 ```
 cargo build --release
 target\release\snipper.exe            # launcher window + tray icon
@@ -78,6 +87,7 @@ Run these before committing:
 - `src/ui.rs`: window plumbing, theme, vector icons, buttons, menus, runtime app icon.
 - `src/output.rs`: clipboard (CF_DIB + PNG), save dialog, PNG files.
 - `src/settings.rs`: persisted preferences.
+- `scripts/release.ps1`: test, build and package into `dist/` (gitignored).
 - `build.rs`, `snipper.manifest`: embed the DPI/common-controls manifest via the MSVC linker.
 
 ---

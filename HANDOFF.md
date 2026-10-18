@@ -17,7 +17,11 @@ for features and layout.
 - Checks: `cargo test` (10 unit tests: geometry, doc model, settings, DIB packing),
   `cargo clippy`, `cargo build --release` (~300 KB exe). Not yet declared in Warmstart project
   settings.
-- Work lands on `main`.
+- Release: `scripts/release.ps1` tests, builds and packages `dist/snipper.exe` plus a zip and
+  SHA-256. Checked in Windows PowerShell 5.1 and PowerShell 7, including cargo missing from PATH
+  and a running copy locking the exe (`-StopRunning`).
+- Work lands on `main`. Nothing has landed yet; `C:\Dev\snipper` only has the initial commit
+  until the branch is landed.
 
 Verified by driving the debug build with window-targeted messages on a 3-monitor mixed-DPI
 setup: launcher renders, full capture (5280×2560) opens the editor and lands on the clipboard,
