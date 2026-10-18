@@ -5,9 +5,11 @@
 ## Where things stand
 
 Public repository: https://github.com/shyoo/snapleaf (origin). Main checkout:
-C:\Dev\snapleaf, with repaired worktree links. Main has the Snapleaf rename at
-f3c9ddd8. This task branch also contains public docs, Apache 2.0 licensing,
-three real app screenshots, and the installer/release/update work below.
+C:\Dev\snapleaf, with repaired worktree links. Main includes the public docs,
+Apache 2.0 licensing, screenshots, and installer/release/update work at 9ecf6a35.
+v0.1.0-rc.1 is published; main CI and release workflow passed, and the user
+confirmed the installer works. This branch adds 16 DPI-scaled pixels below
+the launcher's tray hint by increasing its client height from 92 to 108.
 
 - Native Rust/Win32 screenshot and markup app: region/window/full capture, countdown,
   configurable hotkey, tray, single instance, editable annotations, undo/redo, crop,
@@ -29,7 +31,7 @@ three real app screenshots, and the installer/release/update work below.
   scripts/release-tag.ps1. RCs tag origin/main; promotion tags the open RC's exact source
   commit even if main moved. Final rebuild embeds final version (not byte-identical RC).
   Helper checks clean files, published local main, increasing versions, main CI, and
-  published candidate assets before promotion. No tags/releases have been cut.
+  published candidate assets before promotion. v0.1.0-rc.1 is published.
 - Release builds check stable GitHub releases after 30s and every six hours, download
   the matching setup with checksum verification, then notify. User opens installer
   from the menu; SHA-256 is rechecked. No silent installation or app termination.
@@ -59,8 +61,9 @@ task-branch CI run for verification.
 Warmstart-managed pooled worktree; await-human, local commit-and-merge finish policy.
 Do not edit project.json, merge/push main yourself, or complete the task without request.
 
-1. Land when requested, then publish main through the authorized project flow.
-2. After main CI passes, /release rc; install and verify it, then /release promote.
+1. Land the launcher spacing adjustment when requested.
+2. Cut a new /release rc to include the spacing adjustment before /release promote;
+   promotion of rc.1 would use its original commit without this adjustment.
 3. Verify real stable-release download/open/upgrade after the first final is published.
 
 ## What is unproven

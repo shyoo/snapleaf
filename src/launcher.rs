@@ -19,7 +19,7 @@ use crate::ui::{self, Button, ButtonState, Handler, Icon, Look, WindowSpec};
 pub const CLASS: PCWSTR = w!("SnapleafLauncher");
 
 const CLIENT_W: f32 = 430.0;
-const CLIENT_H: f32 = 92.0;
+const CLIENT_H: f32 = 108.0;
 
 #[derive(Clone, Copy, PartialEq, Debug)]
 enum Btn {
