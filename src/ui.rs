@@ -14,7 +14,7 @@ use windows::Win32::Graphics::Gdi::*;
 use windows::Win32::Graphics::Imaging::*;
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows::Win32::System::Registry::*;
-use windows::Win32::UI::HiDpi::GetDpiForWindow;
+use windows::Win32::UI::HiDpi::{GetDpiForSystem, GetDpiForWindow, GetSystemMetricsForDpi};
 use windows::Win32::UI::Input::KeyboardAndMouse::GetKeyState;
 use windows::Win32::UI::WindowsAndMessaging::*;
 use windows::core::*;
@@ -74,8 +74,8 @@ pub fn create_window<T: Handler>(spec: WindowSpec, state: T) -> Result<HWND> {
             lpfnWndProc: Some(proc_for::<T>),
             hInstance: hinstance(),
             hCursor: LoadCursorW(None, spec.cursor).unwrap_or_default(),
-            hIcon: app_icon(32),
-            hIconSm: app_icon(16),
+            hIcon: app_icon(large_icon_size()),
+            hIconSm: app_icon(small_icon_size()),
             lpszClassName: spec.class,
             ..Default::default()
         };
@@ -624,24 +624,28 @@ pub fn draw_tip(c: &Canvas, t: &Theme, text: &str, anchor: Rect, bounds: Rect, s
 // ---------------------------------------------------------------- app icon
 
 thread_local! {
-    static ICONS: Cell<[HICON; 2]> = const { Cell::new([HICON(std::ptr::null_mut()); 2]) };
+    static ICONS: std::cell::RefCell<Vec<(i32, HICON)>> = const { std::cell::RefCell::new(Vec::new()) };
 }
 
-/// The Snipper icon, drawn at runtime: a rounded accent tile with selection
-/// corners and a red markup arrow.
+/// The Snipper icon at exactly `size` pixels, drawn at runtime: a rounded
+/// accent tile with selection corners and a red markup arrow.
 pub fn app_icon(size: i32) -> HICON {
-    let idx = if size <= 16 { 0 } else { 1 };
-    let cached = ICONS.with(|c| c.get()[idx]);
-    if !cached.is_invalid() {
-        return cached;
+    if let Some(icon) = ICONS.with(|c| c.borrow().iter().find(|(s, _)| *s == size).map(|(_, i)| *i)) {
+        return icon;
     }
     let icon = make_icon(size as u32).unwrap_or_default();
-    ICONS.with(|c| {
-        let mut a = c.get();
-        a[idx] = icon;
-        c.set(a);
-    });
+    ICONS.with(|c| c.borrow_mut().push((size, icon)));
     icon
+}
+
+/// System icon sizes for the primary display, where the taskbar and tray
+/// live; a 16 px icon stretched to 24 px at 150% looks blurry.
+pub fn small_icon_size() -> i32 {
+    unsafe { GetSystemMetricsForDpi(SM_CXSMICON, GetDpiForSystem()) }
+}
+
+pub fn large_icon_size() -> i32 {
+    unsafe { GetSystemMetricsForDpi(SM_CXICON, GetDpiForSystem()) }
 }
 
 fn make_icon(n: u32) -> Result<HICON> {

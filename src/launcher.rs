@@ -103,7 +103,7 @@ fn tray_data(hwnd: HWND) -> NOTIFYICONDATAW {
         uID: 1,
         uFlags: NIF_ICON | NIF_MESSAGE | NIF_TIP,
         uCallbackMessage: app::WM_APP_TRAY,
-        hIcon: ui::app_icon(16),
+        hIcon: ui::app_icon(ui::small_icon_size()),
         ..Default::default()
     };
     copy_wide(&mut nid.szTip, &format!("Snipper — {}", hotkey_hint()));

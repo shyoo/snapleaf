@@ -20,7 +20,11 @@ adds a font choice for text annotations. See README for features and layout.
   It applies to the selected text, or to the default for new text. Restyling while typing keeps
   the edit open. The default font is Segoe UI Bold; it was semibold before, so default text
   looks slightly heavier.
-- Checks: the Warmstart check is `scripts/release.ps1` (cargo test + release build). Also run
+- Tray: Windows 11 hides new tray icons in the ^ overflow until they're pinned. Pinning is per
+  exe path (`HKCU\Control Panel\NotifyIconSettings\*\IsPromoted`). The user chose a one-time pin
+  of `C:\Dev\snipper\dist\snipper.exe`, done by hand, not by the app. Tray and window icons are
+  now drawn at the system icon size for the primary display's DPI instead of a stretched 16 px.
+- Checks: the Warmstart check is `scripts/release.ps1 -StopRunning` (cargo test + release build). Also run
   `cargo clippy`; the three remaining warnings are pre-existing style ones.
 - Release: `scripts/release.ps1` tests, builds and packages `dist/snipper.exe` plus a zip and
   SHA-256.
