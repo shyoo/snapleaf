@@ -7,9 +7,13 @@
 Public repository: https://github.com/shyoo/snapleaf (origin). Main checkout:
 C:\Dev\snapleaf, with repaired worktree links. Main includes the public docs,
 Apache 2.0 licensing, screenshots, and installer/release/update work at 9ecf6a35.
-v0.1.0-rc.1 is published; main CI and release workflow passed, and the user
-confirmed the installer works. This branch adds 16 DPI-scaled pixels below
-the launcher's tray hint by increasing its client height from 92 to 108.
+v0.1.0 is published as latest stable from rc.2 at ee16aec8, including 16 DPI-scaled pixels below
+the launcher's tray hint (client height 92 to 108). Main CI and release workflows
+passed; the user confirmed the rc.1 installer works and requested promotion.
+Stable release run 39165401165 passed and published installer, portable ZIP,
+checksums and build attestations. Runtime stable-update verification remains pending.
+This branch fixes the release helper's promotion asset query: quote the comma-separated
+GitHub JSON fields so PowerShell passes one argument through the GhJson wrapper.
 
 - Native Rust/Win32 screenshot and markup app: region/window/full capture, countdown,
   configurable hotkey, tray, single instance, editable annotations, undo/redo, crop,
@@ -61,9 +65,9 @@ task-branch CI run for verification.
 Warmstart-managed pooled worktree; await-human, local commit-and-merge finish policy.
 Do not edit project.json, merge/push main yourself, or complete the task without request.
 
-1. Land the launcher spacing adjustment when requested.
-2. Cut a new /release rc to include the spacing adjustment before /release promote;
-   promotion of rc.1 would use its original commit without this adjustment.
+1. Land the promotion helper argument fix when requested.
+2. v0.1.0 promotion is complete at ee16aec8. The helper fix is separate from the
+   released app source and awaits landing.
 3. Verify real stable-release download/open/upgrade after the first final is published.
 
 ## What is unproven

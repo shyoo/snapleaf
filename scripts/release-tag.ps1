@@ -41,7 +41,7 @@ Git merge-base --is-ancestor $main origin/main | Out-Null
 $runs = GhJson api "repos/shyoo/snapleaf/actions/workflows/ci.yml/runs?head_sha=$commit&event=push&per_page=100"
 if (-not @($runs.workflow_runs | Where-Object { $_.head_branch -eq 'main' -and $_.conclusion -eq 'success' }).Count) { throw 'CI on origin/main must pass for this commit before cutting a release' }
 if ($candidateTag) {
-    $candidate = GhJson release view $candidateTag --repo shyoo/snapleaf --json isPrerelease,isDraft,assets
+    $candidate = GhJson release view $candidateTag --repo shyoo/snapleaf --json 'isPrerelease,isDraft,assets'
     if (-not $candidate.isPrerelease -or $candidate.isDraft) { throw 'Candidate must be a published prerelease' }
     $expected = "snapleaf-$($candidateTag.Substring(1))-x64-setup.exe"
     if ($expected -cnotin $candidate.assets.name -or 'SHA256SUMS.txt' -cnotin $candidate.assets.name) { throw 'Candidate installer and checksums must be published before promotion' }
