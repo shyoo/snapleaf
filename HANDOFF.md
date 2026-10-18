@@ -50,7 +50,9 @@ and actionlint pass. Candidate and final setup files compile. test-installer.ps1
 passes real per-user install, running-app refusal, registry version, payload hash,
 LICENSE and uninstall checks in an isolated target/ directory. The embedded worker
 command was exercised against GitHub; no stable release currently exists.
-Remote CI verification follows the task-branch push; consult its Actions run.
+Remote CI initially found a newer preinstalled Inno Setup on windows-latest; the
+pinned compiler install now explicitly allows downgrading. Consult the latest
+task-branch CI run for verification.
 
 ## Workspace and next
 

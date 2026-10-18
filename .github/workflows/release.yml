@@ -50,7 +50,7 @@ jobs:
           rustup default stable-x86_64-pc-windows-msvc
           if ($LASTEXITCODE -ne 0) { throw 'Rust selection failed' }
       - name: Install Inno Setup
-        run: choco install innosetup --version=6.7.0 --no-progress -y
+        run: choco install innosetup --version=6.7.0 --allow-downgrade --no-progress -y
       - name: Build installer and portable package
         run: ./scripts/release.ps1 -Installer
       - uses: actions/upload-artifact@v4
