@@ -2,6 +2,7 @@
 //! non-destructive crop, and snapshot-based undo/redo.
 
 use std::cell::RefCell;
+use std::collections::HashMap;
 
 use windows::Win32::Graphics::Direct2D::*;
 use windows::Win32::Graphics::DirectWrite::*;
@@ -9,6 +10,7 @@ use windows::core::*;
 
 use crate::geom::*;
 use crate::gfx::*;
+use crate::settings::FontSpec;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Tool {
@@ -48,7 +50,7 @@ pub enum Kind {
     Highlight { a: Pt, b: Pt },
     Arrow { a: Pt, b: Pt },
     Pen { pts: Vec<Pt> },
-    Text { at: Pt, text: String },
+    Text { at: Pt, text: String, font: FontSpec },
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -87,8 +89,8 @@ impl Shape {
                 let first = pts.first().copied().unwrap_or_default();
                 pts.iter().fold(Rect::from_pts(first, first), |r, p| r.union(&Rect::from_pts(*p, *p))).inflate(w)
             }
-            Kind::Text { at, text } => {
-                let (tw, th) = measure_text(text, self.size);
+            Kind::Text { at, text, font } => {
+                let (tw, th) = measure_text(text, font, self.size);
                 Rect::xywh(at.x, at.y, tw.max(4.0), th)
             }
         }
@@ -210,22 +212,35 @@ pub fn arrow_parts(a: Pt, b: Pt, w: f32) -> (Pt, [Pt; 3]) {
 }
 
 thread_local! {
-    static FORMATS: RefCell<[Option<IDWriteTextFormat>; 3]> = const { RefCell::new([None, None, None]) };
+    static FORMATS: RefCell<HashMap<(FontSpec, usize), IDWriteTextFormat>> = RefCell::new(HashMap::new());
 }
 
-pub fn annotation_format(size: usize) -> Option<IDWriteTextFormat> {
+pub fn annotation_format(font: &FontSpec, size: usize) -> Option<IDWriteTextFormat> {
     let size = size.min(2);
-    FORMATS.with(|f| {
-        let mut f = f.borrow_mut();
-        if f[size].is_none() {
-            f[size] = text_format(FONT_SIZES[size], DWRITE_FONT_WEIGHT_SEMI_BOLD).ok();
-        }
-        f[size].clone()
-    })
+    let key = (font.clone(), size);
+    if let Some(f) = FORMATS.with(|f| f.borrow().get(&key).cloned()) {
+        return Some(f);
+    }
+    let weight = if font.bold { DWRITE_FONT_WEIGHT_BOLD } else { DWRITE_FONT_WEIGHT_NORMAL };
+    let style = if font.italic { DWRITE_FONT_STYLE_ITALIC } else { DWRITE_FONT_STYLE_NORMAL };
+    let fmt = unsafe {
+        gfx().dw.CreateTextFormat(
+            &HSTRING::from(font.family.as_str()),
+            None,
+            weight,
+            style,
+            DWRITE_FONT_STRETCH_NORMAL,
+            FONT_SIZES[size],
+            w!("en-us"),
+        )
+    }
+    .ok()?;
+    FORMATS.with(|f| f.borrow_mut().insert(key, fmt.clone()));
+    Some(fmt)
 }
 
-pub fn measure_text(text: &str, size: usize) -> (f32, f32) {
-    annotation_format(size)
+pub fn measure_text(text: &str, font: &FontSpec, size: usize) -> (f32, f32) {
+    annotation_format(font, size)
         .and_then(|f| text_layout(text, &f).ok())
         .map(|l| layout_size(&l))
         .unwrap_or((0.0, FONT_SIZES[size.min(2)] * 1.33))
@@ -253,8 +268,8 @@ pub fn draw_shape(c: &Canvas, s: &Shape) {
                 }
             }
         },
-        Kind::Text { at, text } => {
-            if let Some(l) = annotation_format(s.size).and_then(|f| text_layout(text, &f).ok()) {
+        Kind::Text { at, text, font } => {
+            if let Some(l) = annotation_format(font, s.size).and_then(|f| text_layout(text, &f).ok()) {
                 c.layout(&l, *at, s.color, 1.0);
             }
         }

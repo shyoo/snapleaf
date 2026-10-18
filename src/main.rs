@@ -10,6 +10,7 @@ mod capture;
 mod countdown;
 mod doc;
 mod editor;
+mod fonts;
 mod geom;
 mod gfx;
 mod launcher;

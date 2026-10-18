@@ -19,8 +19,9 @@ use crate::app;
 use crate::doc::*;
 use crate::geom::*;
 use crate::gfx::*;
+use crate::fonts;
 use crate::output;
-use crate::settings::{self, DELAYS, Mode};
+use crate::settings::{self, DELAYS, FontSpec, Mode};
 use crate::ui::{self, Button, ButtonState, Handler, Icon, Look, WindowSpec};
 
 const TOOLBAR_H: f32 = 48.0;
@@ -43,6 +44,12 @@ const TIMER_TOAST: usize = 3;
 
 const CMD_SNIP: usize = 100;
 const CMD_DELAY: usize = 200;
+const CMD_FONT: usize = 300;
+const CMD_BOLD: usize = 390;
+const CMD_ITALIC: usize = 391;
+const CMD_MORE_FONTS: usize = 392;
+
+const FONT_BTN_W: f32 = 132.0;
 
 #[derive(Clone, Copy, PartialEq, Debug)]
 enum Btn {
@@ -52,6 +59,7 @@ enum Btn {
     Color(usize),
     CustomColor,
     Size(usize),
+    Font,
     Undo,
     Redo,
     Copy,
@@ -175,7 +183,7 @@ pub fn open(img: Image) -> Result<()> {
 
 fn toolbar_min_width(s: f32) -> f32 {
     let h = 36.0;
-    let left = 8.0 + 40.0 + 22.0 + 7.0 * h + 6.0 * 28.0 + 28.0 + 3.0 * 28.0 + 2.0 * h + 4.0 * 13.0;
+    let left = 8.0 + 40.0 + 22.0 + 7.0 * h + 6.0 * 28.0 + 28.0 + 3.0 * 28.0 + FONT_BTN_W + 2.0 * h + 5.0 * 13.0;
     (left + 16.0 + 2.0 * h + 8.0) * s
 }
 
@@ -292,6 +300,15 @@ impl Editor {
             put(&mut v, Button::new(Btn::Size(i), Icon::None, size_tips[i]).look(Look::Dot(DOTS[i])), 28.0 * s, &mut x);
         }
         sep(&mut seps, &mut x);
+        let family = self.text_font().unwrap_or_else(|| settings::get().font).family;
+        let label: String = if family.chars().count() > 13 {
+            family.chars().take(12).chain(std::iter::once('…')).collect()
+        } else {
+            family
+        };
+        let font_btn = Button::new(Btn::Font, Icon::None, "Font (Ctrl+B bold, Ctrl+I italic)").label(&label).menu();
+        put(&mut v, font_btn, FONT_BTN_W * s, &mut x);
+        sep(&mut seps, &mut x);
         put(&mut v, Button::new(Btn::Undo, Icon::Undo, "Undo (Ctrl+Z)"), h, &mut x);
         put(&mut v, Button::new(Btn::Redo, Icon::Redo, "Redo (Ctrl+Y)"), h, &mut x);
         let width = ui::client_rect(hwnd).r;
@@ -351,6 +368,66 @@ impl Editor {
                 }
             });
         }
+    }
+
+    /// Font shown and edited by the font button: the selected text's, or the
+    /// default for new text while the Text tool is active.
+    fn text_font(&self) -> Option<FontSpec> {
+        match self.selected.and_then(|i| self.doc.state.shapes.get(i)) {
+            Some(Shape { kind: Kind::Text { font, .. }, .. }) => Some(font.clone()),
+            Some(_) => None,
+            None => (self.tool == Tool::Text).then(|| settings::get().font),
+        }
+    }
+
+    fn apply_font(&mut self, hwnd: HWND, change: impl FnOnce(&mut FontSpec)) {
+        let Some(mut font) = self.text_font() else { return };
+        change(&mut font);
+        if let Some(i) = self.selected {
+            self.doc.checkpoint();
+            if let Some(Shape { kind: Kind::Text { font: f, .. }, .. }) = self.doc.state.shapes.get_mut(i) {
+                *f = font.clone();
+            }
+            self.doc.settle();
+        }
+        settings::update(|s| s.font = font);
+        self.place_ime(hwnd);
+        ui::invalidate(hwnd);
+    }
+
+    fn font_menu(&mut self, hwnd: HWND, anchor: Rect) {
+        let Some(cur) = self.text_font() else { return };
+        let mut families: Vec<String> = fonts::menu_families().into_iter().map(String::from).collect();
+        if !families.iter().any(|f| f.eq_ignore_ascii_case(&cur.family)) {
+            families.insert(0, cur.family.clone());
+        }
+        let mut items: Vec<(usize, String, bool)> = families
+            .iter()
+            .enumerate()
+            .map(|(i, f)| (CMD_FONT + i, f.clone(), f.eq_ignore_ascii_case(&cur.family)))
+            .collect();
+        items.push((0, String::new(), false));
+        items.push((CMD_BOLD, "Bold\tCtrl+B".into(), cur.bold));
+        items.push((CMD_ITALIC, "Italic\tCtrl+I".into(), cur.italic));
+        items.push((0, String::new(), false));
+        items.push((CMD_MORE_FONTS, "More fonts…".into(), false));
+        let cmd = ui::popup_menu(hwnd, ui::to_screen(hwnd, pt(anchor.l, anchor.b)), &items);
+        self.pressed = None;
+        match cmd {
+            CMD_BOLD => self.apply_font(hwnd, |f| f.bold = !f.bold),
+            CMD_ITALIC => self.apply_font(hwnd, |f| f.italic = !f.italic),
+            CMD_MORE_FONTS => {
+                if let Some(chosen) = fonts::choose(hwnd, &cur) {
+                    self.apply_font(hwnd, |f| *f = chosen);
+                }
+            }
+            c if c >= CMD_FONT && c < CMD_FONT + families.len() => {
+                let family = families[c - CMD_FONT].clone();
+                self.apply_font(hwnd, |f| f.family = family);
+            }
+            _ => {}
+        }
+        ui::invalidate(hwnd);
     }
 
     fn pick_custom_color(&mut self, hwnd: HWND) {
@@ -494,7 +571,7 @@ impl Editor {
                 let s = settings::get();
                 self.new_snip(hwnd, s.mode, s.delay);
             }
-            Btn::NewMenu => {}
+            Btn::NewMenu | Btn::Font => {}
             Btn::Tool(t) => self.set_tool(hwnd, t),
             Btn::Color(i) => self.apply_style(Some(PALETTE[i]), None),
             Btn::CustomColor => self.pick_custom_color(hwnd),
@@ -513,6 +590,7 @@ impl Editor {
         match b {
             Btn::Color(_) | Btn::CustomColor => self.style_tool().is_some(),
             Btn::Size(_) => self.style_tool().is_some_and(|t| t.has_size()),
+            Btn::Font => self.text_font().is_some(),
             Btn::Undo => self.doc.can_undo() || self.edit.is_some(),
             Btn::Redo => self.doc.can_redo(),
             _ => true,
@@ -542,9 +620,9 @@ impl Editor {
                 let slot = Tool::Text.slot().unwrap_or(2);
                 let set = settings::get();
                 let size = set.sizes[slot];
-                let (_, line_h) = measure_text("", size);
+                let (_, line_h) = measure_text("", &set.font, size);
                 self.doc.state.shapes.push(Shape {
-                    kind: Kind::Text { at: pt(at.x, at.y - line_h / 2.0), text: String::new() },
+                    kind: Kind::Text { at: pt(at.x, at.y - line_h / 2.0), text: String::new(), font: set.font.clone() },
                     color: set.colors[slot],
                     size,
                 });
@@ -667,8 +745,8 @@ impl Editor {
     fn caret_doc(&self) -> Option<(Pt, f32)> {
         let (idx, shown, caret16) = self.display_text()?;
         let s = &self.doc.state.shapes[idx];
-        let Kind::Text { at, .. } = s.kind else { return None };
-        let l = text_layout(&shown, &annotation_format(s.size)?).ok()?;
+        let Kind::Text { at, ref font, .. } = s.kind else { return None };
+        let l = text_layout(&shown, &annotation_format(font, s.size)?).ok()?;
         let (mut x, mut y) = (0f32, 0f32);
         let mut m = DWRITE_HIT_TEST_METRICS::default();
         unsafe { l.HitTestTextPosition(caret16, false, &mut x, &mut y, &mut m).ok()? };
@@ -677,8 +755,8 @@ impl Editor {
 
     fn caret_from_point(&self, idx: usize, p: Pt) -> Option<usize> {
         let s = self.doc.state.shapes.get(idx)?;
-        let Kind::Text { at, text } = &s.kind else { return None };
-        let l = text_layout(text, &annotation_format(s.size)?).ok()?;
+        let Kind::Text { at, text, font } = &s.kind else { return None };
+        let l = text_layout(text, &annotation_format(font, s.size)?).ok()?;
         let (mut trailing, mut inside) = (BOOL(0), BOOL(0));
         let mut m = DWRITE_HIT_TEST_METRICS::default();
         unsafe { l.HitTestPoint(p.x - at.x, p.y - at.y, &mut trailing, &mut inside, &mut m).ok()? };
@@ -728,11 +806,18 @@ impl Editor {
     fn mouse_down(&mut self, hwnd: HWND, p: Pt, middle: bool, double: bool) {
         unsafe { SetFocus(Some(hwnd)).ok() };
         if let Some(b) = self.button_at(hwnd, p) {
-            self.commit_text(hwnd);
+            // Style buttons restyle the text being typed without ending the edit.
+            if !matches!(b, Btn::Font | Btn::Color(_) | Btn::CustomColor | Btn::Size(_)) {
+                self.commit_text(hwnd);
+            }
             self.pressed = Some(b);
+            let rect = || self.buttons(hwnd).0.into_iter().find(|x| x.id == b).map(|x| x.rect).unwrap_or_default();
             if b == Btn::NewMenu {
-                let rect = self.buttons(hwnd).0.into_iter().find(|x| x.id == b).map(|x| x.rect).unwrap_or_default();
-                self.new_menu(hwnd, rect);
+                let r = rect();
+                self.new_menu(hwnd, r);
+            } else if b == Btn::Font && self.enabled(b) {
+                let r = rect();
+                self.font_menu(hwnd, r);
             }
             ui::invalidate(hwnd);
             return;
@@ -1061,7 +1146,7 @@ impl Editor {
         }
         let hint = match self.tool {
             Tool::Select => "Drag to move · Double-click text to edit · Del to delete",
-            Tool::Text => "Click to type · Esc or click outside to finish",
+            Tool::Text => "Click to type · Esc or click outside to finish · Ctrl+B / Ctrl+I bold, italic",
             Tool::Crop => "Drag to choose the area to keep",
             _ => "Shift to constrain · Space+drag to pan · Ctrl+wheel to zoom",
         };
@@ -1292,6 +1377,8 @@ impl Handler for Editor {
                         b'Z' if shift => self.undo(hwnd, true),
                         b'Z' => self.undo(hwnd, false),
                         b'Y' => self.undo(hwnd, true),
+                        b'B' => self.apply_font(hwnd, |f| f.bold = !f.bold),
+                        b'I' => self.apply_font(hwnd, |f| f.italic = !f.italic),
                         b'V' if self.edit.is_some() => {
                             if let Some(t) = output::paste_text(hwnd) {
                                 self.insert_text(&t);

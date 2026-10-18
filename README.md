@@ -58,12 +58,15 @@ Only one instance runs at a time. Launching again forwards the request to the ru
 | Shift while drawing | Square rectangles, 45° arrows |
 | Ctrl+wheel, Ctrl+0, Ctrl+1 | Zoom, fit, 100% |
 | Space+drag or middle-drag | Pan |
+| Ctrl+B / Ctrl+I | Bold / italic for the selected or next text |
 | Ctrl+N / Ctrl+W | New snip / close |
 
 Shapes stay editable. Select one to move it, drag its handles, or recolour or resize it from the
-toolbar. Double-click text to edit it. Text entry supports IME input (e.g. Korean). Settings
-(mode, delay, shortcut, per-tool colour and size, last save folder) live in
-`%APPDATA%\Snipper\settings.ini`.
+toolbar. Double-click text to edit it. Text entry supports IME input (e.g. Korean). The font
+button picks the typeface for the selected text, or for new text while the Text tool is active.
+It offers common Windows fonts, Bold, Italic, and **More fonts…** (the system font dialog). You
+can change the font mid-typing without ending the edit. Settings (mode, delay, shortcut, per-tool
+colour and size, text font, last save folder) live in `%APPDATA%\Snipper\settings.ini`.
 
 ## Checks
 
@@ -83,6 +86,7 @@ Run these before committing:
 - `src/countdown.rs`: the delay countdown tile.
 - `src/editor.rs`: markup editor window (toolbar, canvas, tools, text entry, IME).
 - `src/doc.rs`: shapes, hit testing, handles, undo/redo, flattening.
+- `src/fonts.rs`: font menu choices and the system font dialog, mapped to DirectWrite families.
 - `src/gfx.rs`: Direct2D/DirectWrite/WIC helpers, off-screen render, PNG encode.
 - `src/ui.rs`: window plumbing, theme, vector icons, buttons, menus, runtime app icon.
 - `src/output.rs`: clipboard (CF_DIB + PNG), save dialog, PNG files.

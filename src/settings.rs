@@ -70,6 +70,20 @@ impl Hotkey {
     }
 }
 
+/// Typeface of a text annotation. `family` is a DirectWrite family name.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct FontSpec {
+    pub family: String,
+    pub bold: bool,
+    pub italic: bool,
+}
+
+impl Default for FontSpec {
+    fn default() -> Self {
+        FontSpec { family: "Segoe UI".into(), bold: true, italic: false }
+    }
+}
+
 /// Colour and size index for each styled tool, in `doc::Tool::slot` order:
 /// rectangle, arrow, text, highlighter, pen.
 pub const STYLE_SLOTS: usize = 5;
@@ -84,6 +98,8 @@ pub struct Settings {
     pub sizes: [usize; STYLE_SLOTS],
     pub custom_color: Color,
     pub save_dir: String,
+    /// Font for new text annotations.
+    pub font: FontSpec,
 }
 
 impl Default for Settings {
@@ -96,6 +112,7 @@ impl Default for Settings {
             sizes: [1, 1, 1, 1, 1],
             custom_color: Color(0x00897B),
             save_dir: String::new(),
+            font: FontSpec::default(),
         }
     }
 }
@@ -139,6 +156,9 @@ pub fn parse(text: &str) -> Settings {
             "hotkey" => s.hotkey = Hotkey::parse(v).unwrap_or(s.hotkey),
             "custom_color" => s.custom_color = parse_color(v).unwrap_or(s.custom_color),
             "save_dir" => s.save_dir = v.to_string(),
+            "text.font" if !v.is_empty() => s.font.family = v.to_string(),
+            "text.bold" => s.font.bold = v == "1",
+            "text.italic" => s.font.italic = v == "1",
             _ => {
                 for (i, slot) in SLOT_KEYS.iter().enumerate() {
                     if k == format!("{slot}.color") {
@@ -165,6 +185,7 @@ pub fn serialize(s: &Settings) -> String {
     for (i, slot) in SLOT_KEYS.iter().enumerate() {
         out += &format!("{slot}.color={:06X}\n{slot}.size={}\n", s.colors[i].0, s.sizes[i]);
     }
+    out += &format!("text.font={}\ntext.bold={}\ntext.italic={}\n", s.font.family, s.font.bold as u8, s.font.italic as u8);
     out
 }
 
@@ -192,6 +213,7 @@ mod tests {
         s.hotkey = Hotkey::Off;
         s.colors[3] = Color(0x123456);
         s.sizes[0] = 2;
+        s.font = FontSpec { family: "Malgun Gothic".into(), bold: false, italic: true };
         s.save_dir = r"C:\Users\me\Pictures".into();
         let back = parse(&serialize(&s));
         assert_eq!(back.mode, Mode::Window);
@@ -200,6 +222,7 @@ mod tests {
         assert_eq!(back.colors[3], Color(0x123456));
         assert_eq!(back.sizes[0], 2);
         assert_eq!(back.save_dir, s.save_dir);
+        assert_eq!(back.font, s.font);
     }
 
     #[test]
