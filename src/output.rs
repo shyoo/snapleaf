@@ -1,4 +1,4 @@
-//! Getting images out: the clipboard (CF_DIB + "PNG") and PNG files.
+//! Image export (clipboard DIB + PNG, PNG files) and text clipboard access.
 
 use std::path::{Path, PathBuf};
 
@@ -23,15 +23,7 @@ pub fn copy_image(owner: HWND, img: &Image) -> Result<()> {
     let dib = dib_bytes(img);
     let png = encode_png(img).ok();
     unsafe {
-        let mut opened = OpenClipboard(Some(owner));
-        for _ in 0..10 {
-            if opened.is_ok() {
-                break;
-            }
-            std::thread::sleep(std::time::Duration::from_millis(25));
-            opened = OpenClipboard(Some(owner));
-        }
-        opened?;
+        open_clipboard(owner)?;
         let result = (|| -> Result<()> {
             EmptyClipboard()?;
             set_data(CF_DIB, &dib)?;
@@ -48,11 +40,38 @@ pub fn copy_image(owner: HWND, img: &Image) -> Result<()> {
     }
 }
 
+fn open_clipboard(owner: HWND) -> Result<()> {
+    let mut opened = unsafe { OpenClipboard(Some(owner)) };
+    for _ in 0..10 {
+        if opened.is_ok() {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(25));
+        opened = unsafe { OpenClipboard(Some(owner)) };
+    }
+    opened
+}
+
+/// Copy a text selection using Windows' Unicode clipboard format.
+pub fn copy_text(owner: HWND, text: &str) -> Result<()> {
+    let utf16: Vec<u16> = text.replace('\n', "\r\n").encode_utf16().chain(Some(0)).collect();
+    let bytes: Vec<u8> = utf16.iter().flat_map(|u| u.to_ne_bytes()).collect();
+    unsafe {
+        open_clipboard(owner)?;
+        let result = (|| {
+            EmptyClipboard()?;
+            set_data(13, &bytes)
+        })();
+        let _ = CloseClipboard();
+        result
+    }
+}
+
 /// Plain text on the clipboard, if any (for pasting into a text annotation).
 pub fn paste_text(owner: HWND) -> Option<String> {
     const CF_UNICODETEXT: u32 = 13;
     unsafe {
-        OpenClipboard(Some(owner)).ok()?;
+        open_clipboard(owner).ok()?;
         let text = (|| {
             let h = GetClipboardData(CF_UNICODETEXT).ok()?;
             let hg = HGLOBAL(h.0);

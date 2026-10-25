@@ -80,6 +80,7 @@ enum Drag {
     None,
     /// The last shape is being drawn.
     Create,
+    TextSelect,
     Move { from: Pt, orig: Shape },
     Handle { h: usize, orig: Shape },
     Crop { from: Pt, to: Pt },
@@ -90,8 +91,80 @@ struct TextEdit {
     idx: usize,
     /// Caret as a char index into the shape's text.
     caret: usize,
+    /// Fixed end of the selection, also a char index.
+    anchor: usize,
+    /// Document x retained across consecutive vertical moves.
+    preferred_x: Option<f32>,
     /// Uncommitted IME composition, shown at the caret.
     composing: String,
+}
+
+impl TextEdit {
+    fn range(&self) -> std::ops::Range<usize> {
+        self.anchor.min(self.caret)..self.anchor.max(self.caret)
+    }
+
+    fn move_to(&mut self, caret: usize, extend: bool) {
+        self.caret = caret;
+        if !extend { self.anchor = caret; }
+    }
+
+    fn replace(&mut self, text: &mut String, value: &str) {
+        let r = self.range();
+        text.replace_range(byte_at(text, r.start)..byte_at(text, r.end), value);
+        self.caret = r.start + value.chars().count();
+        self.anchor = self.caret;
+        self.preferred_x = None;
+    }
+
+    fn navigate(&mut self, text: &str, key: VIRTUAL_KEY, ctrl: bool, shift: bool) {
+        let chars: Vec<char> = text.chars().collect();
+        let r = self.range();
+        let c = self.caret;
+        let dest = match key {
+            VK_LEFT if !shift && !r.is_empty() => r.start,
+            VK_RIGHT if !shift && !r.is_empty() => r.end,
+            VK_LEFT if ctrl => word_edge(&chars, c, false),
+            VK_RIGHT if ctrl => word_edge(&chars, c, true),
+            VK_LEFT => c.saturating_sub(1),
+            VK_RIGHT => (c + 1).min(chars.len()),
+            VK_HOME if ctrl => 0,
+            VK_END if ctrl => chars.len(),
+            VK_HOME => chars[..c].iter().rposition(|ch| *ch == '\n').map_or(0, |i| i + 1),
+            VK_END => chars[c..].iter().position(|ch| *ch == '\n').map_or(chars.len(), |i| c + i),
+            _ => c,
+        };
+        self.move_to(dest, shift);
+        self.preferred_x = None;
+    }
+
+    fn delete(&mut self, text: &mut String, back: bool, ctrl: bool) {
+        if self.range().is_empty() {
+            let chars: Vec<char> = text.chars().collect();
+            self.anchor = if ctrl { word_edge(&chars, self.caret, !back) }
+                else if back { self.caret.saturating_sub(1) }
+                else { (self.caret + 1).min(chars.len()) };
+        }
+        self.replace(text, "");
+    }
+}
+
+fn word_edge(chars: &[char], mut c: usize, forward: bool) -> usize {
+    let class = |ch: char| if ch.is_whitespace() { 0 } else if ch.is_alphanumeric() || ch == '_' { 1 } else { 2 };
+    if forward {
+        if let Some(ch) = chars.get(c) {
+            let kind = class(*ch);
+            while c < chars.len() && class(chars[c]) == kind { c += 1; }
+        }
+        while c < chars.len() && chars[c].is_whitespace() { c += 1; }
+    } else {
+        while c > 0 && chars[c - 1].is_whitespace() { c -= 1; }
+        if c > 0 {
+            let kind = class(chars[c - 1]);
+            while c > 0 && class(chars[c - 1]) == kind { c -= 1; }
+        }
+    }
+    c
 }
 
 struct Editor {
@@ -635,7 +708,7 @@ impl Editor {
             _ => 0,
         };
         self.selected = Some(idx);
-        self.edit = Some(TextEdit { idx, caret, composing: String::new() });
+        self.edit = Some(TextEdit { idx, caret, anchor: caret, preferred_x: None, composing: String::new() });
         self.caret_on = true;
         unsafe {
             let _ = ImmAssociateContextEx(hwnd, HIMC::default(), IACE_DEFAULT);
@@ -659,7 +732,7 @@ impl Editor {
         if !e.composing.is_empty() {
             let comp = std::mem::take(&mut e.composing);
             if let Some(Shape { kind: Kind::Text { text, .. }, .. }) = self.doc.state.shapes.get_mut(e.idx) {
-                text.insert_str(byte_at(text, e.caret), &comp);
+                e.replace(text, &comp);
             }
         }
         let empty = matches!(self.doc.state.shapes.get(e.idx), Some(Shape { kind: Kind::Text { text, .. }, .. }) if text.trim().is_empty());
@@ -671,54 +744,41 @@ impl Editor {
         ui::invalidate(hwnd);
     }
 
-    fn edit_text<R>(&mut self, f: impl FnOnce(&mut String, &mut usize) -> R) -> Option<R> {
+    fn edit_text<R>(&mut self, f: impl FnOnce(&mut String, &mut TextEdit) -> R) -> Option<R> {
         let e = self.edit.as_mut()?;
         match self.doc.state.shapes.get_mut(e.idx) {
             Some(Shape { kind: Kind::Text { text, .. }, .. }) => {
                 self.caret_on = true;
-                Some(f(text, &mut e.caret))
+                Some(f(text, e))
             }
             _ => None,
         }
     }
 
     fn insert_text(&mut self, s: &str) {
-        self.edit_text(|text, caret| {
-            text.insert_str(byte_at(text, *caret), s);
-            *caret += s.chars().count();
-        });
+        self.edit_text(|text, e| e.replace(text, s));
     }
 
     fn text_key(&mut self, hwnd: HWND, vk: VIRTUAL_KEY) -> bool {
+        let ctrl = ui::key_down(VK_CONTROL.0);
+        let shift = ui::key_down(VK_SHIFT.0);
+        // IME owns navigation while its composition UI is active.
+        if self.edit.as_ref().is_some_and(|e| !e.composing.is_empty()) && vk != VK_ESCAPE {
+            return false;
+        }
         let handled = match vk {
-            VK_BACK => self.edit_text(|t, c| {
-                if *c > 0 {
-                    let b = byte_at(t, *c - 1);
-                    t.remove(b);
-                    *c -= 1;
-                }
-            }),
-            VK_DELETE => self.edit_text(|t, c| {
-                if *c < t.chars().count() {
-                    let b = byte_at(t, *c);
-                    t.remove(b);
-                }
-            }),
-            VK_LEFT => self.edit_text(|_, c| *c = c.saturating_sub(1)),
-            VK_RIGHT => self.edit_text(|t, c| *c = (*c + 1).min(t.chars().count())),
-            VK_HOME => self.edit_text(|t, c| {
-                let before: Vec<char> = t.chars().take(*c).collect();
-                *c = before.iter().rposition(|ch| *ch == '\n').map(|i| i + 1).unwrap_or(0);
-            }),
-            VK_END => self.edit_text(|t, c| {
-                let chars: Vec<char> = t.chars().collect();
-                *c = chars[*c..].iter().position(|ch| *ch == '\n').map(|i| *c + i).unwrap_or(chars.len());
-            }),
-            VK_ESCAPE => {
-                self.commit_text(hwnd);
+            VK_BACK | VK_DELETE => self.edit_text(|t, e| e.delete(t, vk == VK_BACK, ctrl)),
+            VK_LEFT | VK_RIGHT | VK_HOME | VK_END => self.edit_text(|t, e| e.navigate(t, vk, ctrl, shift)),
+            VK_UP | VK_DOWN => {
+                self.move_text_vertical(vk == VK_DOWN, shift);
                 Some(())
             }
-            VK_RETURN if ui::key_down(VK_CONTROL.0) => {
+            VK_A if ctrl => self.edit_text(|t, e| {
+                e.anchor = 0;
+                e.caret = t.chars().count();
+                e.preferred_x = None;
+            }),
+            VK_ESCAPE | VK_RETURN if vk == VK_ESCAPE || ctrl => {
                 self.commit_text(hwnd);
                 Some(())
             }
@@ -731,12 +791,42 @@ impl Editor {
         handled.is_some()
     }
 
+    fn move_text_vertical(&mut self, down: bool, shift: bool) {
+        let Some((p, h)) = self.caret_doc() else { return };
+        let Some(e) = &self.edit else { return };
+        let x = e.preferred_x.unwrap_or(p.x);
+        let target = pt(x, p.y + if down { h * 1.5 } else { -h * 0.5 });
+        if let Some(caret) = self.caret_from_point(e.idx, target)
+            && let Some(e) = self.edit.as_mut() {
+                e.move_to(caret, shift);
+                e.preferred_x = Some(x);
+                self.caret_on = true;
+            }
+    }
+
+    fn copy_text_selection(&mut self, hwnd: HWND, cut: bool) {
+        let Some(e) = &self.edit else { return };
+        let Kind::Text { text, .. } = &self.doc.state.shapes[e.idx].kind else { return };
+        let r = e.range();
+        if r.is_empty() { return; }
+        let selected = &text[byte_at(text, r.start)..byte_at(text, r.end)];
+        match output::copy_text(hwnd, selected) {
+            Ok(()) if cut => { self.insert_text(""); }
+            Err(_) => self.show_toast(hwnd, "Could not copy text"),
+            _ => {}
+        }
+        self.place_ime(hwnd);
+        ui::invalidate(hwnd);
+    }
+
     /// Text as displayed while editing (composition spliced in) and the caret's UTF-16 index.
     fn display_text(&self) -> Option<(usize, String, u32)> {
         let e = self.edit.as_ref()?;
         let Some(Shape { kind: Kind::Text { text, .. }, .. }) = self.doc.state.shapes.get(e.idx) else { return None };
-        let b = byte_at(text, e.caret);
-        let shown = format!("{}{}{}", &text[..b], e.composing, &text[b..]);
+        let r = if e.composing.is_empty() { e.caret..e.caret } else { e.range() };
+        let b = byte_at(text, r.start);
+        let end = byte_at(text, r.end);
+        let shown = format!("{}{}{}", &text[..b], e.composing, &text[end..]);
         let caret16 = (text[..b].encode_utf16().count() + e.composing.encode_utf16().count()) as u32;
         Some((e.idx, shown, caret16))
     }
@@ -833,14 +923,18 @@ impl Editor {
         let d = self.to_doc(hwnd, p);
         let tol = 5.0 * self.scale / self.zoom;
 
-        // Clicking inside the text being edited just moves the caret.
+        // Click or drag inside the active text to move/extend its selection.
         if let Some(e) = &self.edit {
             let idx = e.idx;
             if self.doc.state.shapes[idx].bounds().inflate(tol).contains(d) {
                 if let Some(c) = self.caret_from_point(idx, d)
                     && let Some(e) = self.edit.as_mut() {
-                        e.caret = c;
+                        e.move_to(c, ui::key_down(VK_SHIFT.0));
+                        e.preferred_x = None;
                     }
+                self.drag = Drag::TextSelect;
+                unsafe { SetCapture(hwnd) };
+                self.place_ime(hwnd);
                 self.caret_on = true;
                 ui::invalidate(hwnd);
                 return;
@@ -916,7 +1010,18 @@ impl Editor {
     fn mouse_move(&mut self, hwnd: HWND, p: Pt) {
         let d = self.to_doc(hwnd, p);
         let shift = ui::key_down(VK_SHIFT.0);
+        let text_caret = if matches!(self.drag, Drag::TextSelect) {
+            self.edit.as_ref().and_then(|e| self.caret_from_point(e.idx, d))
+        } else { None };
         match &mut self.drag {
+            Drag::TextSelect => {
+                if let Some(caret) = text_caret && let Some(e) = self.edit.as_mut() {
+                    e.move_to(caret, true);
+                    e.preferred_x = None;
+                    self.caret_on = true;
+                }
+                self.place_ime(hwnd);
+            }
             Drag::None => {
                 let h = self.button_at(hwnd, p);
                 if h != self.hover {
@@ -1022,7 +1127,7 @@ impl Editor {
                     self.update_view(hwnd);
                 }
             }
-            Drag::Pan { .. } | Drag::None => {}
+            Drag::Pan { .. } | Drag::TextSelect | Drag::None => {}
         }
         ui::invalidate(hwnd);
     }
@@ -1200,6 +1305,24 @@ impl Editor {
                 }
             }
         }
+        if let Some(e) = &self.edit
+            && e.composing.is_empty() && !e.range().is_empty()
+            && let Kind::Text { at, text, font } = &shape.kind
+            && let Some(format) = annotation_format(font, shape.size) {
+                let layout = text_layout(text, &format)?;
+                let range = e.range();
+                let start = text[..byte_at(text, range.start)].encode_utf16().count() as u32;
+                let len = text[byte_at(text, range.start)..byte_at(text, range.end)].encode_utf16().count() as u32;
+                let mut count = 0;
+                unsafe { let _ = layout.HitTestTextRange(start, len, at.x, at.y, None, &mut count); }
+                let mut metrics = vec![DWRITE_HIT_TEST_METRICS::default(); count as usize];
+                unsafe { layout.HitTestTextRange(start, len, at.x, at.y, Some(&mut metrics), &mut count)?; }
+                for m in metrics.iter().take(count as usize) {
+                    let a = self.to_screen(hwnd, pt(m.left, m.top));
+                    let b = self.to_screen(hwnd, pt(m.left + m.width.max(2.0), m.top + m.height));
+                    c.fill(Rect::from_pts(a, b), accent, 0.35);
+                }
+            }
         if editing && self.caret_on
             && let Some((p, h)) = self.caret_doc() {
                 let top = self.to_screen(hwnd, p);
@@ -1370,6 +1493,8 @@ impl Handler for Editor {
                 let shift = ui::key_down(VK_SHIFT.0);
                 if ctrl {
                     match wp.0 as u8 {
+                        b'C' if self.edit.is_some() => self.copy_text_selection(hwnd, false),
+                        b'X' if self.edit.is_some() => self.copy_text_selection(hwnd, true),
                         b'C' => self.copy(hwnd),
                         b'S' => {
                             self.save(hwnd);
@@ -1382,6 +1507,7 @@ impl Handler for Editor {
                         b'V' if self.edit.is_some() => {
                             if let Some(t) = output::paste_text(hwnd) {
                                 self.insert_text(&t);
+                                self.place_ime(hwnd);
                                 ui::invalidate(hwnd);
                             }
                         }
@@ -1533,5 +1659,86 @@ impl Handler for Editor {
             }
             _ => None,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn edit(caret: usize) -> TextEdit {
+        TextEdit { idx: 0, caret, anchor: caret, preferred_x: None, composing: String::new() }
+    }
+
+    #[test]
+    fn shift_selection_reverses_and_arrows_collapse_it() {
+        let mut e = edit(2);
+        e.navigate("abcd", VK_RIGHT, false, true);
+        assert_eq!(e.range(), 2..3);
+        e.navigate("abcd", VK_LEFT, false, true);
+        e.navigate("abcd", VK_LEFT, false, true);
+        assert_eq!(e.range(), 1..2);
+        e.navigate("abcd", VK_RIGHT, false, false);
+        assert_eq!((e.caret, e.anchor), (2, 2));
+        e.navigate("abcd", VK_END, true, true);
+        e.navigate("abcd", VK_LEFT, false, false);
+        assert_eq!((e.caret, e.anchor), (2, 2));
+    }
+
+    #[test]
+    fn selection_replacement_and_deletion_preserve_unicode() {
+        let mut text = String::from("a\u{1f642}\u{d55c}\nz");
+        let mut e = edit(3);
+        e.anchor = 1;
+        e.replace(&mut text, "\u{1f680}");
+        assert_eq!(text, "a\u{1f680}\nz");
+        assert_eq!((e.caret, e.anchor), (2, 2));
+        e.delete(&mut text, true, false);
+        assert_eq!(text, "a\nz");
+        e.anchor = 3;
+        e.delete(&mut text, false, false);
+        assert_eq!(text, "a");
+        e.move_to(0, false);
+        e.delete(&mut text, true, false);
+        assert_eq!(text, "a");
+        e.move_to(1, false);
+        e.delete(&mut text, false, false);
+        assert_eq!(text, "a");
+    }
+
+    #[test]
+    fn home_end_use_line_or_document_boundaries() {
+        let text = "one\n\ntwo\n";
+        let mut e = edit(6);
+        e.navigate(text, VK_HOME, false, false);
+        assert_eq!(e.caret, 5);
+        e.navigate(text, VK_END, false, true);
+        assert_eq!(e.range(), 5..8);
+        e.navigate(text, VK_HOME, true, true);
+        assert_eq!((e.caret, e.anchor), (0, 5));
+        e.navigate(text, VK_END, true, false);
+        assert_eq!(e.caret, 9);
+        e.navigate(text, VK_HOME, false, false);
+        assert_eq!(e.caret, 9);
+        e.move_to(4, false);
+        e.navigate(text, VK_END, false, false);
+        assert_eq!(e.caret, 4);
+    }
+
+    #[test]
+    fn ctrl_navigation_and_deletion_follow_word_boundaries() {
+        let mut text = String::from("hello,  world\nnext");
+        let mut e = edit(0);
+        e.navigate(&text, VK_RIGHT, true, false);
+        assert_eq!(e.caret, 5);
+        e.navigate(&text, VK_RIGHT, true, true);
+        assert_eq!(e.range(), 5..8);
+        e.replace(&mut text, " ");
+        assert_eq!(text, "hello world\nnext");
+        e.delete(&mut text, false, true);
+        assert_eq!(text, "hello next");
+        e.delete(&mut text, true, true);
+        assert_eq!(text, "next");
+        assert_eq!(e.caret, 0);
     }
 }

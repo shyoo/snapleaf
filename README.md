@@ -50,7 +50,10 @@ The fresh capture is copied automatically. Add your markup, then press **Ctrl+C*
 the updated image or **Ctrl+S** to save a PNG. Paste into chat, email, documents, or a browser.
 
 Shapes remain editable: select one to move, resize, recolour, or delete it. Double-click text
-to edit it. Text supports font choices, bold, italic, and IME input.
+to edit it. Text supports font choices, bold, italic, and IME input. While editing text,
+use arrow keys to move between characters and lines, Shift+arrows or mouse dragging to
+select, and Ctrl+A to select all. Typing or pasting replaces selected text; Ctrl+C / Ctrl+X
+copy or cut the selected text. Finish editing with Esc or Ctrl+Enter before copying the image.
 
 | Shortcut | Action |
 | --- | --- |
@@ -62,6 +65,9 @@ to edit it. Text supports font choices, bold, italic, and IME input.
 | Ctrl+wheel / Ctrl+0 / Ctrl+1 | Zoom / fit / actual size |
 | Space+drag / middle-drag | Pan |
 | Ctrl+B / Ctrl+I | Bold / italic text |
+| Ctrl+Left / Ctrl+Right | Move by word while editing text (Shift to select) |
+| Home / End / Ctrl+Home / Ctrl+End | Line / text boundaries while editing (Shift to select) |
+| Ctrl+Backspace / Ctrl+Delete | Delete preceding / following word while editing text |
 | Ctrl+N / Ctrl+W | New capture / close editor |
 
 ## Build from source

@@ -12,8 +12,13 @@ the launcher's tray hint (client height 92 to 108). Main CI and release workflow
 passed; the user confirmed the rc.1 installer works and requested promotion.
 Stable release run 39165401165 passed and published installer, portable ZIP,
 checksums and build attestations. Runtime stable-update verification remains pending.
-This branch fixes the release helper's promotion asset query: quote the comma-separated
-GitHub JSON fields so PowerShell passes one argument through the GhJson wrapper.
+Text annotation editing now tracks an anchor and caret: Shift+navigation, Ctrl+A,
+mouse drag/Shift+click, visible multiline selection, and selection replacement by
+input, paste, or IME. Up/Down uses DirectWrite hit testing and remembers horizontal
+position across short lines. Ctrl+arrows/Home/End navigate words/document boundaries;
+Ctrl+Backspace/Delete remove words. During text editing Ctrl+C/X copy/cut Unicode text;
+finish editing (Esc/Ctrl+Enter) to use Ctrl+C for the image. Text clipboard operations
+reuse the image copy retry to tolerate clipboard contention. No dependencies added.
 
 - Native Rust/Win32 screenshot and markup app: region/window/full capture, countdown,
   configurable hotkey, tray, single instance, editable annotations, undo/redo, crop,
@@ -49,8 +54,14 @@ GitHub JSON fields so PowerShell passes one argument through the GhJson wrapper.
 
 ## Verification
 
-Local cargo test (10), cargo build --release and cargo clippy pass; only the two
-existing chunks_exact warnings. scripts/test-release.ps1 passes offline version,
+Local cargo test (14), cargo build --release and cargo clippy pass; only the two
+existing chunks_exact warnings. New pure tests cover selection reversal/collapse,
+Unicode replacement/deletion, line/document boundaries, and word navigation/deletion.
+A temporary target/ UI harness drove this editor with SendMessageW and per-thread
+keyboard state: vertical column recovery across a short line, Shift+Up/Down, multiline
+highlight painting, Ctrl+A/C/X/V, and Unicode replacement passed. It opened its own
+editor without disturbing the installed Snapleaf process. Real keyboard IME input
+remains unproven. scripts/test-release.ps1 passes offline version,
 release planning/promotion, URL, checksum and download fixtures. Skill validation
 and actionlint pass. Candidate and final setup files compile. test-installer.ps1
 passes real per-user install, running-app refusal, registry version, payload hash,
@@ -62,13 +73,14 @@ task-branch CI run for verification.
 
 ## Workspace and next
 
-Warmstart-managed pooled worktree; await-human, local commit-and-merge finish policy.
-Do not edit project.json, merge/push main yourself, or complete the task without request.
+Warmstart-managed pooled worktree; run-to-end, local commit-and-merge finish policy.
+Do not edit project.json or merge/push main yourself. Commit and call task_complete
+when the requested work is ready; Warmstart runs the release helper and lands it.
 
-1. Land the promotion helper argument fix when requested.
-2. v0.1.0 promotion is complete at ee16aec8. The helper fix is separate from the
-   released app source and awaits landing.
-3. Verify real stable-release download/open/upgrade after the first final is published.
+1. Verify text selection and replacement with real keyboard IME composition.
+2. Verify real stable-release download/open/upgrade with published assets.
+3. Text movement uses Unicode scalar indices (existing caret convention); grapheme
+   cluster movement/deletion and language-specific word breaking remain future work.
 
 ## What is unproven
 
