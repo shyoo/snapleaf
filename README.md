@@ -52,8 +52,9 @@ the updated image or **Ctrl+S** to save a PNG. Paste into chat, email, documents
 Shapes remain editable: select one to move, resize, recolour, or delete it. Double-click text
 to edit it. Text supports font choices, bold, italic, and IME input. While editing text,
 use arrow keys to move between characters and lines, Shift+arrows or mouse dragging to
-select, and Ctrl+A to select all. Typing or pasting replaces selected text; Ctrl+C / Ctrl+X
-copy or cut the selected text. Finish editing with Esc or Ctrl+Enter before copying the image.
+select, and Ctrl+A to select all. Typing or pasting replaces selected text; Ctrl+C copies
+selected text (or the image if nothing is selected), and Ctrl+Shift+C always copies the image.
+Ctrl+X cuts selected text. Press Esc or Ctrl+Enter to finish editing.
 
 | Shortcut | Action |
 | --- | --- |
@@ -68,6 +69,7 @@ copy or cut the selected text. Finish editing with Esc or Ctrl+Enter before copy
 | Ctrl+Left / Ctrl+Right | Move by word while editing text (Shift to select) |
 | Home / End / Ctrl+Home / Ctrl+End | Line / text boundaries while editing (Shift to select) |
 | Ctrl+Backspace / Ctrl+Delete | Delete preceding / following word while editing text |
+| Ctrl+Shift+C | Copy image while editing text |
 | Ctrl+N / Ctrl+W | New capture / close editor |
 
 ## Build from source

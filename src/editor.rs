@@ -104,6 +104,10 @@ impl TextEdit {
         self.anchor.min(self.caret)..self.anchor.max(self.caret)
     }
 
+    fn has_selection(&self) -> bool {
+        self.anchor != self.caret
+    }
+
     fn move_to(&mut self, caret: usize, extend: bool) {
         self.caret = caret;
         if !extend { self.anchor = caret; }
@@ -806,9 +810,9 @@ impl Editor {
 
     fn copy_text_selection(&mut self, hwnd: HWND, cut: bool) {
         let Some(e) = &self.edit else { return };
+        if !e.has_selection() { return; }
         let Kind::Text { text, .. } = &self.doc.state.shapes[e.idx].kind else { return };
         let r = e.range();
-        if r.is_empty() { return; }
         let selected = &text[byte_at(text, r.start)..byte_at(text, r.end)];
         match output::copy_text(hwnd, selected) {
             Ok(()) if cut => { self.insert_text(""); }
@@ -1493,9 +1497,12 @@ impl Handler for Editor {
                 let shift = ui::key_down(VK_SHIFT.0);
                 if ctrl {
                     match wp.0 as u8 {
-                        b'C' if self.edit.is_some() => self.copy_text_selection(hwnd, false),
-                        b'X' if self.edit.is_some() => self.copy_text_selection(hwnd, true),
+                        b'C' if shift => self.copy(hwnd),
+                        b'C' if self.edit.as_ref().is_some_and(|e| e.has_selection()) => {
+                            self.copy_text_selection(hwnd, false);
+                        }
                         b'C' => self.copy(hwnd),
+                        b'X' if self.edit.is_some() => self.copy_text_selection(hwnd, true),
                         b'S' => {
                             self.save(hwnd);
                         }
@@ -1740,5 +1747,18 @@ mod tests {
         e.delete(&mut text, true, true);
         assert_eq!(text, "next");
         assert_eq!(e.caret, 0);
+    }
+
+    #[test]
+    fn text_edit_has_selection() {
+        let mut e = edit(2);
+        assert!(!e.has_selection());
+        e.navigate("abcd", VK_RIGHT, false, true);
+        assert!(e.has_selection());
+        assert_eq!(e.has_selection(), !e.range().is_empty());
+        e.navigate("abcd", VK_RIGHT, false, false);
+        assert!(!e.has_selection());
+        e.navigate("abcd", VK_HOME, true, true);
+        assert!(e.has_selection());
     }
 }

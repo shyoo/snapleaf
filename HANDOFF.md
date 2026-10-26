@@ -16,9 +16,10 @@ Text annotation editing now tracks an anchor and caret: Shift+navigation, Ctrl+A
 mouse drag/Shift+click, visible multiline selection, and selection replacement by
 input, paste, or IME. Up/Down uses DirectWrite hit testing and remembers horizontal
 position across short lines. Ctrl+arrows/Home/End navigate words/document boundaries;
-Ctrl+Backspace/Delete remove words. During text editing Ctrl+C/X copy/cut Unicode text;
-finish editing (Esc/Ctrl+Enter) to use Ctrl+C for the image. Text clipboard operations
-reuse the image copy retry to tolerate clipboard contention. No dependencies added.
+Ctrl+Backspace/Delete remove words. During text editing, Ctrl+C copies selected text when a range is selected or
+falls back to copying the full image when unselected; Ctrl+Shift+C always copies the image
+to the clipboard. Ctrl+X cuts selected text. Text clipboard operations reuse the image copy
+retry to tolerate clipboard contention. No dependencies added.
 
 - Native Rust/Win32 screenshot and markup app: region/window/full capture, countdown,
   configurable hotkey, tray, single instance, editable annotations, undo/redo, crop,
@@ -54,8 +55,8 @@ reuse the image copy retry to tolerate clipboard contention. No dependencies add
 
 ## Verification
 
-Local cargo test (14), cargo build --release and cargo clippy pass; only the two
-existing chunks_exact warnings. New pure tests cover selection reversal/collapse,
+Local cargo test (15), cargo build --release and cargo clippy pass; only the two
+existing chunks_exact warnings. Pure tests cover selection tracking, reversal/collapse,
 Unicode replacement/deletion, line/document boundaries, and word navigation/deletion.
 A temporary target/ UI harness drove this editor with SendMessageW and per-thread
 keyboard state: vertical column recovery across a short line, Shift+Up/Down, multiline
