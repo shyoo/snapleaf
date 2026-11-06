@@ -1,5 +1,8 @@
 //! The markup document: the captured image, editable shapes on top of it, a
 //! non-destructive crop, and snapshot-based undo/redo.
+//!
+//! The crop is the canvas. It can extend past the captured image when markup is
+//! placed outside it; that extra area is filled with `CANVAS_FILL`.
 
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -43,6 +46,23 @@ impl Tool {
 pub const STROKES: [f32; 3] = [2.0, 4.0, 8.0];
 pub const FONT_SIZES: [f32; 3] = [16.0, 24.0, 40.0];
 pub const HIGHLIGHT_ALPHA: f32 = 0.4;
+/// Background of canvas area that lies outside the captured image.
+pub const CANVAS_FILL: Color = Color::WHITE;
+/// Space left between markup and a canvas edge that grew to fit it.
+const GROW_PAD: f32 = 8.0;
+/// Largest canvas side, well inside Direct2D's bitmap limits.
+const MAX_CANVAS: f32 = 16384.0;
+
+/// `canvas` widened, only on the sides where `r` sticks out, to hold `r` plus a
+/// margin. Grown edges land on whole pixels; the result never exceeds `MAX_CANVAS`.
+pub fn grow_canvas(canvas: Rect, r: Rect) -> Rect {
+    let mut c = canvas;
+    if r.l < c.l { c.l = (r.l - GROW_PAD).floor().max(canvas.r - MAX_CANVAS); }
+    if r.t < c.t { c.t = (r.t - GROW_PAD).floor().max(canvas.b - MAX_CANVAS); }
+    if r.r > c.r { c.r = (r.r + GROW_PAD).ceil().min(c.l + MAX_CANVAS); }
+    if r.b > c.b { c.b = (r.b + GROW_PAD).ceil().min(c.t + MAX_CANVAS); }
+    c
+}
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Kind {
@@ -287,7 +307,7 @@ pub fn draw_shapes(c: &Canvas, shapes: &[Shape]) {
 #[derive(Clone, Debug, PartialEq)]
 pub struct State {
     pub shapes: Vec<Shape>,
-    /// Visible part of the image, in image pixels.
+    /// The canvas, in image pixels: part of the image, possibly extended past it.
     pub crop: Rect,
 }
 
@@ -353,11 +373,20 @@ impl Doc {
         self.state.shapes.iter().rposition(|s| s.hit(p, tol))
     }
 
+    /// Grow the canvas so shape `i` is wholly on it. Returns whether it grew.
+    pub fn grow_to_fit(&mut self, i: usize) -> bool {
+        let Some(s) = self.state.shapes.get(i) else { return false };
+        let grown = grow_canvas(self.state.crop, s.bounds());
+        let grew = grown != self.state.crop;
+        self.state.crop = grown;
+        grew
+    }
+
     pub fn is_dirty(&self) -> bool {
         !self.state.shapes.is_empty() || self.state.crop != Rect::new(0.0, 0.0, self.image.w as f32, self.image.h as f32)
     }
 
-    /// The cropped image with every shape burned in.
+    /// The canvas with the image and every shape burned in.
     pub fn flatten(&self) -> Result<Image> {
         let crop = self.state.crop.round();
         if !self.is_dirty() {
@@ -369,6 +398,7 @@ impl Doc {
             c.set_transform(1.0, -crop.l, -crop.t);
             let bmp = self.image.to_bitmap(rt)?;
             let full = Rect::new(0.0, 0.0, self.image.w as f32, self.image.h as f32);
+            c.fill(crop, CANVAS_FILL, 1.0);
             unsafe {
                 rt.DrawBitmap(&bmp, Some(&full.d2d()), 1.0, D2D1_BITMAP_INTERPOLATION_MODE_NEAREST_NEIGHBOR, None);
             }
@@ -429,6 +459,28 @@ mod tests {
         d.settle();
         assert!(d.undo());
         assert!(!d.can_undo());
+    }
+
+    #[test]
+    fn canvas_grows_only_where_markup_sticks_out() {
+        let c = Rect::new(0.0, 0.0, 100.0, 50.0);
+        assert_eq!(grow_canvas(c, Rect::new(10.0, 10.0, 90.0, 40.0)), c);
+        assert_eq!(grow_canvas(c, Rect::new(80.0, 10.0, 130.5, 40.0)), Rect::new(0.0, 0.0, 139.0, 50.0));
+        assert_eq!(grow_canvas(c, Rect::new(-20.2, -3.0, 20.0, 60.0)), Rect::new(-29.0, -11.0, 100.0, 68.0));
+        let far = grow_canvas(c, Rect::new(-1e6, 0.0, 1e6, 10.0));
+        assert_eq!((far.l, far.w()), (100.0 - MAX_CANVAS, MAX_CANVAS));
+    }
+
+    #[test]
+    fn growing_to_fit_a_shape_is_undone_with_it() {
+        let mut d = Doc::new(Image { w: 4, h: 4, px: vec![0; 64] });
+        d.checkpoint();
+        d.state.shapes.push(rect(pt(2.0, 2.0), pt(30.0, 3.0)));
+        assert!(d.grow_to_fit(0));
+        assert_eq!(d.state.crop, Rect::new(0.0, 0.0, 39.0, 4.0));
+        assert!(!d.grow_to_fit(0));
+        assert!(d.undo());
+        assert_eq!(d.state.crop, Rect::new(0.0, 0.0, 4.0, 4.0));
     }
 
     #[test]

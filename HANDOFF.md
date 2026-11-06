@@ -20,6 +20,12 @@ Ctrl+Backspace/Delete remove words. During text editing, Ctrl+C copies selected 
 falls back to copying the full image when unselected; Ctrl+Shift+C always copies the image
 to the clipboard. Ctrl+X cuts selected text. Text clipboard operations reuse the image copy
 retry to tolerate clipboard contention. No dependencies added.
+The canvas grows past the capture: State.crop is now the canvas and may extend beyond the
+image. Finishing a create/move/resize/nudge/text edit or a size/font change calls
+Doc::grow_to_fit for that one shape (8 px margin, whole pixels, 16384 px cap); only that
+shape counts, so a later crop can still cut other markup. While drawing or typing, paint
+previews the grown canvas. Area outside the image is CANVAS_FILL (white) on screen and in
+copy/save. Growth shares the change's undo checkpoint. Crop still only shrinks the canvas.
 
 - Native Rust/Win32 screenshot and markup app: region/window/full capture, countdown,
   configurable hotkey, tray, single instance, editable annotations, undo/redo, crop,
@@ -55,9 +61,13 @@ retry to tolerate clipboard contention. No dependencies added.
 
 ## Verification
 
-Local cargo test (15), cargo build --release and cargo clippy pass; only the two
+Local cargo test (17), cargo build --release and cargo clippy pass; only the two
 existing chunks_exact warnings. Pure tests cover selection tracking, reversal/collapse,
-Unicode replacement/deletion, line/document boundaries, and word navigation/deletion.
+Unicode replacement/deletion, line/document boundaries, word navigation/deletion, and
+canvas growth (per-side, rounding, cap, undo). Canvas growth was driven with SendMessageW
+in a target/ copy using its own mutex and a synthetic 400x300 image, because screen
+capture returns Access denied in the agent session: an arrow dragged past the right edge
+and text typed left of the image produced a 1422x300 clipboard image with white fill.
 A temporary target/ UI harness drove this editor with SendMessageW and per-thread
 keyboard state: vertical column recovery across a short line, Shift+Up/Down, multiline
 highlight painting, Ctrl+A/C/X/V, and Unicode replacement passed. It opened its own
@@ -80,7 +90,8 @@ when the requested work is ready; Warmstart runs the release helper and lands it
 
 1. Verify text selection and replacement with real keyboard IME composition.
 2. Verify real stable-release download/open/upgrade with published assets.
-3. Text movement uses Unicode scalar indices (existing caret convention); grapheme
+3. Optional: let the crop tool extend the canvas too (today it only shrinks it).
+4. Text movement uses Unicode scalar indices (existing caret convention); grapheme
    cluster movement/deletion and language-specific word breaking remain future work.
 
 ## What is unproven

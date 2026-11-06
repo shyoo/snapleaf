@@ -339,6 +339,31 @@ impl Editor {
         ui::invalidate(hwnd);
     }
 
+    /// Extend the canvas past the capture so shape `i` is not cut off, keeping
+    /// the view still when zoomed manually.
+    fn grow_canvas(&mut self, hwnd: HWND, i: Option<usize>) {
+        let old = self.doc.state.crop;
+        if let Some(i) = i
+            && self.doc.grow_to_fit(i) {
+                let c = self.doc.state.crop;
+                self.ox -= (old.l - c.l) * self.zoom;
+                self.oy -= (old.t - c.t) * self.zoom;
+                self.update_view(hwnd);
+            }
+    }
+
+    /// Canvas as shown right now: while a shape is drawn, moved, resized or
+    /// typed, it already includes the room that shape will claim when done.
+    fn live_canvas(&self, shapes: &[Shape]) -> Rect {
+        let crop = self.doc.state.crop;
+        let live = match (&self.edit, &self.drag) {
+            (Some(e), _) => Some(e.idx),
+            (None, Drag::Create | Drag::Move { .. } | Drag::Handle { .. }) => self.selected,
+            _ => None,
+        };
+        live.and_then(|i| shapes.get(i)).map_or(crop, |s| grow_canvas(crop, s.bounds()))
+    }
+
     fn buttons(&self, hwnd: HWND) -> (Vec<Button<Btn>>, Vec<f32>) {
         let s = self.scale;
         let h = 36.0 * s;
@@ -421,7 +446,7 @@ impl Editor {
         Some((set.colors[slot], set.sizes[slot]))
     }
 
-    fn apply_style(&mut self, color: Option<Color>, size: Option<usize>) {
+    fn apply_style(&mut self, hwnd: HWND, color: Option<Color>, size: Option<usize>) {
         let Some(tool) = self.style_tool() else { return };
         if let Some(i) = self.selected {
             self.doc.checkpoint();
@@ -433,6 +458,8 @@ impl Editor {
                     s.size = z;
                 }
             }
+            // A thicker stroke or larger text can reach past the canvas edge.
+            self.grow_canvas(hwnd, Some(i));
             self.doc.settle();
         }
         if let Some(slot) = tool.slot() {
@@ -465,6 +492,7 @@ impl Editor {
             if let Some(Shape { kind: Kind::Text { font: f, .. }, .. }) = self.doc.state.shapes.get_mut(i) {
                 *f = font.clone();
             }
+            self.grow_canvas(hwnd, Some(i));
             self.doc.settle();
         }
         settings::update(|s| s.font = font);
@@ -520,7 +548,7 @@ impl Editor {
         if unsafe { ChooseColorW(&mut cc) }.as_bool() {
             let c = Color::from_colorref(cc.rgbResult.0);
             settings::update(|s| s.custom_color = c);
-            self.apply_style(Some(c), None);
+            self.apply_style(hwnd, Some(c), None);
         }
     }
 
@@ -597,6 +625,7 @@ impl Editor {
         if let Some(i) = self.selected {
             self.doc.checkpoint();
             self.doc.state.shapes[i].translate(d);
+            self.grow_canvas(hwnd, Some(i));
             ui::invalidate(hwnd);
         }
     }
@@ -650,9 +679,9 @@ impl Editor {
             }
             Btn::NewMenu | Btn::Font => {}
             Btn::Tool(t) => self.set_tool(hwnd, t),
-            Btn::Color(i) => self.apply_style(Some(PALETTE[i]), None),
+            Btn::Color(i) => self.apply_style(hwnd, Some(PALETTE[i]), None),
             Btn::CustomColor => self.pick_custom_color(hwnd),
-            Btn::Size(i) => self.apply_style(None, Some(i)),
+            Btn::Size(i) => self.apply_style(hwnd, None, Some(i)),
             Btn::Undo => self.undo(hwnd, false),
             Btn::Redo => self.undo(hwnd, true),
             Btn::Copy => self.copy(hwnd),
@@ -743,6 +772,8 @@ impl Editor {
         if empty {
             self.doc.state.shapes.remove(e.idx);
             self.selected = None;
+        } else {
+            self.grow_canvas(hwnd, Some(e.idx));
         }
         self.doc.settle();
         ui::invalidate(hwnd);
@@ -1108,6 +1139,7 @@ impl Editor {
                     self.doc.state.shapes.pop();
                     self.selected = None;
                 }
+                self.grow_canvas(hwnd, self.selected);
                 self.doc.settle();
             }
             Drag::Move { .. } | Drag::Handle { .. } => {
@@ -1119,6 +1151,7 @@ impl Editor {
                         *b = pt(r.r, r.b);
                     }
                 }
+                self.grow_canvas(hwnd, self.selected);
                 self.doc.settle();
             }
             Drag::Crop { from, to } => {
@@ -1185,9 +1218,23 @@ impl Editor {
         // Image and shapes, in document coordinates.
         let o = self.origin(hwnd);
         let crop = self.doc.state.crop;
+        let edited;
+        let shapes = match self.display_text() {
+            Some((idx, shown, _)) => {
+                let mut v = self.doc.state.shapes.clone();
+                if let Some(Shape { kind: Kind::Text { text, .. }, .. }) = v.get_mut(idx) {
+                    *text = shown;
+                }
+                edited = v;
+                &edited
+            }
+            None => &self.doc.state.shapes,
+        };
+        let view = self.live_canvas(shapes);
         c.push_clip(cv);
         c.set_transform(self.zoom, o.x, o.y);
-        c.push_clip(crop);
+        c.push_clip(view);
+        c.fill(view, CANVAS_FILL, 1.0);
         if let Some(bmp) = &self.bmp {
             let full = Rect::new(0.0, 0.0, self.doc.image.w as f32, self.doc.image.h as f32);
             let interp = if self.zoom < 1.0 {
@@ -1197,20 +1244,11 @@ impl Editor {
             };
             unsafe { rt.DrawBitmap(bmp, Some(&full.d2d()), 1.0, interp, None) };
         }
-        match self.display_text() {
-            Some((idx, shown, _)) => {
-                let mut shapes = self.doc.state.shapes.clone();
-                if let Some(Shape { kind: Kind::Text { text, .. }, .. }) = shapes.get_mut(idx) {
-                    *text = shown;
-                }
-                draw_shapes(&c, &shapes);
-            }
-            None => draw_shapes(&c, &self.doc.state.shapes),
-        }
+        draw_shapes(&c, shapes);
         c.pop_clip();
         c.reset_transform();
 
-        let img_rect = Rect::from_pts(self.to_screen(hwnd, pt(crop.l, crop.t)), self.to_screen(hwnd, pt(crop.r, crop.b)));
+        let img_rect = Rect::from_pts(self.to_screen(hwnd, pt(view.l, view.t)), self.to_screen(hwnd, pt(view.r, view.b)));
         c.stroke(img_rect.inflate(0.5), t.text, 0.15, 1.0);
 
         self.paint_selection(hwnd, &c, &t)?;
@@ -1257,7 +1295,7 @@ impl Editor {
             Tool::Select => "Drag to move · Double-click text to edit · Del to delete",
             Tool::Text => "Click to type · Esc or click outside to finish · Ctrl+B / Ctrl+I bold, italic",
             Tool::Crop => "Drag to choose the area to keep",
-            _ => "Shift to constrain · Space+drag to pan · Ctrl+wheel to zoom",
+            _ => "Shift to constrain · Draw past the edge to grow the canvas · Ctrl+wheel to zoom · Space+drag to pan",
         };
         let left = format!("{} × {} px     {}", crop.w() as i32, crop.h() as i32, hint);
         c.text(&left, &sf, Rect::new(10.0 * s, sb.t, sb.r - 80.0 * s, sb.b), t.dim, 1.0);

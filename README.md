@@ -49,6 +49,10 @@ area; use **Exit Snapleaf** in the tray menu to quit. Change the global shortcut
 The fresh capture is copied automatically. Add your markup, then press **Ctrl+C** to copy
 the updated image or **Ctrl+S** to save a PNG. Paste into chat, email, documents, or a browser.
 
+Markup can go beyond the capture: draw, type, or move an annotation past the edge and the
+canvas grows to fit it, with white around the screenshot. Zoom out (Ctrl+wheel) for more room
+around a capture that fills the window; Ctrl+Z undoes the growth along with the change.
+
 Shapes remain editable: select one to move, resize, recolour, or delete it. Double-click text
 to edit it. Text supports font choices, bold, italic, and IME input. While editing text,
 use arrow keys to move between characters and lines, Shift+arrows or mouse dragging to
